@@ -350,11 +350,57 @@ export default function App() {
     } catch {}
   }
 
+  function buildCommuteMix(targetMin = 30) {
+    const target = targetMin * 60
+    const positions = loadPositions()
+    const pool = [...episodes].filter((ep) => ep.durationSec > 0)
+    const news = pool.filter((ep) => NEWS_CATEGORIES.includes(ep.category))
+    const other = pool.filter((ep) => !NEWS_CATEGORIES.includes(ep.category))
+    const mix = []; let total = 0
+    const remaining = (ep) => { const pos = positions[ep.id] || 0; return Math.max(ep.durationSec - pos, 60) }
+    // 1. Add latest news from each feed
+    const newsByFeed = {}
+    news.forEach((ep) => { if (!newsByFeed[ep.feedName]) newsByFeed[ep.feedName] = ep })
+    for (const ep of Object.values(newsByFeed)) {
+      mix.push(ep); total += remaining(ep)
+    }
+    // 2. If under target, fill with other episodes (alternate feeds)
+    if (total < target) {
+      const otherByFeed = {}
+      other.forEach((ep) => { if (!otherByFeed[ep.feedName]) otherByFeed[ep.feedName] = []; otherByFeed[ep.feedName].push(ep) })
+      const feedQueues = Object.values(otherByFeed)
+      let qi = 0; let passes = 0
+      while (total < target && passes < pool.length && feedQueues.length > 0) {
+        passes++
+        const q = feedQueues[qi % feedQueues.length]
+        const ep = q.shift()
+        if (!ep) { feedQueues.splice(qi % feedQueues.length, 1); continue }
+        if (mix.some((m) => m.id === ep.id)) { qi++; continue }
+        mix.push(ep); total += remaining(ep); qi++
+      }
+    }
+    // 3. If still under, add more news episodes
+    for (const ep of news) {
+      if (total >= target) break
+      if (mix.some((m) => m.id === ep.id)) continue
+      mix.push(ep); total += remaining(ep)
+    }
+    return { mix, totalMin: Math.round(total / 60) }
+  }
+
+  function playCommuteMix() {
+    const { mix } = buildCommuteMix(30)
+    if (mix.length === 0) return
+    setEpisodes(mix)
+    setCurrentIndex(0); setPlaying(true); setCurrentTime(0); setDuration(0); setTab('playing')
+  }
+
   const current = currentIndex >= 0 ? episodes[currentIndex] : null
   const pct = duration > 0 ? (currentTime / duration) * 100 : 0
   const filteredEpisodes = categoryFilter === 'All' ? episodes : episodes.filter((ep) => ep.category === categoryFilter)
   const upNext = episodes.filter((_, i) => i !== currentIndex && i > currentIndex).slice(0, 5)
   const recsToShow = RECOMMENDED.filter((r) => !feeds.some((f) => f.name === r.name))
+  const commuteMix = buildCommuteMix(30)
 
   return (
     <div className="app">
@@ -400,6 +446,21 @@ export default function App() {
                 </div>
               </div>
               {sleepRemaining > 0 && <div className="sleep-remaining">Stopping in {Math.floor(sleepRemaining/60)}:{(sleepRemaining%60).toString().padStart(2,'0')}</div>}
+            </div>
+          )}
+
+          {/* Commute Mix */}
+          {commuteMix.mix.length > 0 && (
+            <div className="commute-card" onClick={playCommuteMix}>
+              <div className="commute-left">
+                <div className="commute-icon">🚗</div>
+                <div className="commute-info">
+                  <div className="commute-title">Morning Commute</div>
+                  <div className="commute-meta">{commuteMix.mix.length} episodes · ~{commuteMix.totalMin} min</div>
+                  <div className="commute-feeds">{[...new Set(commuteMix.mix.map((e) => e.feedName))].join(' · ')}</div>
+                </div>
+              </div>
+              <span className="commute-play">▶</span>
             </div>
           )}
 
