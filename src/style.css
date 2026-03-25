@@ -34,9 +34,14 @@ body {
 .tab-content {
   flex: 1;
   padding: 16px;
-  padding-top: env(safe-area-inset-top, 16px);
+  padding-top: max(env(safe-area-inset-top, 16px), 20px);
   padding-bottom: 140px;
   overflow-y: auto;
+}
+
+/* iPhone Dynamic Island - extra top padding for standalone PWA */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .tab-content { padding-top: calc(env(safe-area-inset-top) + 8px); }
 }
 
 header { padding: 8px 0 16px; }
@@ -128,7 +133,9 @@ h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
   border: 1px solid var(--border);
   box-shadow: 0 2px 8px rgba(107, 78, 255, 0.05);
 }
-.feed-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.feed-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; cursor: pointer; }
+.feed-header-info { flex: 1; min-width: 0; }
+.feed-arrow { color: var(--text-dim); font-size: 20px; flex-shrink: 0; }
 .feed-art { width: 40px; height: 40px; border-radius: 10px; object-fit: cover; }
 .feed-name { font-size: 15px; font-weight: 600; }
 .feed-cat { font-size: 11px; color: var(--accent); font-weight: 500; }
@@ -148,6 +155,11 @@ h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
 .ep-info { flex: 1; min-width: 0; }
 .ep-title { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
 .ep-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.ep-desc {
+  font-size: 12px; color: var(--text-dim); margin-top: 4px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; line-height: 1.4;
+}
 
 .new-badge {
   font-size: 9px; font-weight: 700; padding: 2px 6px;
@@ -180,6 +192,11 @@ h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
 .playing-info { text-align: center; width: 100%; padding: 0 16px; margin-bottom: 24px; }
 .playing-title { font-size: 18px; font-weight: 700; line-height: 1.3; }
 .playing-meta { font-size: 14px; color: var(--text-muted); margin-top: 4px; }
+.playing-desc {
+  font-size: 13px; color: var(--text-dim); margin-top: 8px;
+  line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical; overflow: hidden; text-align: left;
+}
 
 .progress-bar {
   height: 6px; background: var(--surface2); border-radius: 3px;
@@ -272,3 +289,76 @@ h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
   transition: all 0.2s; flex-shrink: 0;
 }
 .remove-btn:active { background: #e55; color: white; border-color: #e55; }
+
+/* === DETAIL / PREVIEW VIEW === */
+.back-btn {
+  background: none; border: none; color: var(--accent);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  padding: 4px 0 12px; display: block;
+}
+.back-btn:active { opacity: 0.7; }
+
+.detail-header {
+  display: flex; gap: 14px; align-items: flex-start;
+  margin-bottom: 12px;
+}
+.detail-art {
+  width: 100px; height: 100px; border-radius: 14px; object-fit: cover;
+  flex-shrink: 0; box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+.detail-fallback {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; font-weight: 700; color: white;
+}
+.detail-info { flex: 1; min-width: 0; }
+.detail-name { font-size: 20px; font-weight: 700; line-height: 1.2; }
+.detail-artist { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+.detail-count { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+.detail-desc {
+  font-size: 13px; color: var(--text-muted); line-height: 1.5;
+  margin-bottom: 8px; padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.add-feed-btn {
+  width: 100%; padding: 12px; border-radius: 10px; border: none;
+  background: var(--accent); color: white;
+  font-size: 15px; font-weight: 600; cursor: pointer;
+  margin-top: 12px; transition: background 0.2s;
+}
+.add-feed-btn:active { background: var(--accent-dim); }
+
+.added-feed-label {
+  text-align: center; padding: 12px; margin-top: 12px;
+  font-size: 14px; color: var(--text-dim);
+  background: var(--surface); border-radius: 10px;
+}
+
+.see-all-btn {
+  display: block; width: 100%; padding: 10px; margin-top: 4px;
+  background: none; border: none; border-top: 1px solid var(--border);
+  color: var(--accent); font-size: 13px; font-weight: 600;
+  cursor: pointer; text-align: center;
+}
+.see-all-btn:active { opacity: 0.7; }
+
+.search-detail { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.search-result { cursor: pointer; }
+
+/* === EMPTY STATE === */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 60px 20px; text-align: center;
+}
+.empty-icon { font-size: 64px; margin-bottom: 16px; opacity: 0.6; }
+.empty-title { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+.empty-sub { font-size: 14px; color: var(--text-muted); line-height: 1.5; }
+
+.feed-manage-row { cursor: pointer; }
+
+/* Wider tap targets for iPhone */
+@media (min-width: 390px) {
+  .ep-play { width: 36px; height: 36px; font-size: 14px; }
+  .mini-play { width: 40px; height: 40px; font-size: 16px; }
+  .play-btn { width: 64px; height: 64px; font-size: 24px; }
+}
