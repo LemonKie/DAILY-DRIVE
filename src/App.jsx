@@ -40,6 +40,34 @@ function savePlayback(data) {
   localStorage.setItem('dd-playback', JSON.stringify(data))
 }
 
+function loadPositions() {
+  try { return JSON.parse(localStorage.getItem('dd-positions')) || {} } catch { return {} }
+}
+
+function savePosition(episodeId, time) {
+  const positions = loadPositions()
+  positions[episodeId] = time
+  localStorage.setItem('dd-positions', JSON.stringify(positions))
+}
+
+function getPosition(episodeId) {
+  return loadPositions()[episodeId] || 0
+}
+
+function loadCachedEpisodes() {
+  try {
+    const cached = JSON.parse(localStorage.getItem('dd-episodes'))
+    if (Array.isArray(cached) && cached.length > 0) {
+      return cached.map((ep) => ({ ...ep, pubDate: new Date(ep.pubDate) }))
+    }
+  } catch {}
+  return null
+}
+
+function cacheEpisodes(episodes) {
+  localStorage.setItem('dd-episodes', JSON.stringify(episodes))
+}
+
 function formatTime(sec) {
   if (!sec || isNaN(sec)) return '0:00'
   const m = Math.floor(sec / 60)
@@ -99,8 +127,8 @@ function updateMediaSession(episode, playing, handlers) {
 
 export default function App() {
   const [feeds, setFeeds] = useState(loadFeeds)
-  const [episodes, setEpisodes] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [episodes, setEpisodes] = useState(() => loadCachedEpisodes() || [])
+  const [loading, setLoading] = useState(() => !loadCachedEpisodes())
   const [error, setError] = useState(null)
   const [currentIndex, setCurrentIndex] = useState(-1)
   const [playing, setPlaying] = useState(false)
@@ -139,6 +167,7 @@ export default function App() {
       const todayEps = allEpisodes.filter((ep) => ep.pubDate >= today)
       const finalEps = todayEps.length > 0 ? todayEps : allEpisodes.slice(0, 6)
       setEpisodes(finalEps)
+      cacheEpisodes(finalEps)
 
       if (results.every((r) => r.status === 'rejected')) {
         setError('Could not load any feeds. Check your connection.')
@@ -153,25 +182,29 @@ export default function App() {
     }
   }, [])
 
-  // Initial load + restore playback
+  // Initial load: restore from cache instantly, then refresh feeds in background
   useEffect(() => {
-    fetchAllFeeds(feeds).then((eps) => {
-      const saved = loadPlayback()
-      if (saved && eps.length > 0) {
-        const idx = eps.findIndex((ep) => ep.id === saved.episodeId)
-        if (idx >= 0) {
-          setCurrentIndex(idx)
-          setTimeout(() => {
-            const audio = audioRef.current
-            if (audio) {
-              audio.src = eps[idx].audioUrl
-              audio.load()
-              audio.currentTime = saved.time || 0
-            }
-          }, 100)
-        }
+    const saved = loadPlayback()
+    const cached = loadCachedEpisodes()
+
+    // Restore playback from cache immediately
+    if (saved && cached && cached.length > 0) {
+      const idx = cached.findIndex((ep) => ep.id === saved.episodeId)
+      if (idx >= 0) {
+        setCurrentIndex(idx)
+        setTimeout(() => {
+          const audio = audioRef.current
+          if (audio) {
+            audio.src = cached[idx].audioUrl
+            audio.load()
+            audio.currentTime = saved.time || 0
+          }
+        }, 100)
       }
-    })
+    }
+
+    // Refresh feeds in the background
+    fetchAllFeeds(feeds)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const playEpisode = useCallback((index) => {
@@ -185,8 +218,11 @@ export default function App() {
     const audio = audioRef.current
     if (!audio || currentIndex < 0 || !episodes[currentIndex]) return
 
-    audio.src = episodes[currentIndex].audioUrl
+    const ep = episodes[currentIndex]
+    audio.src = ep.audioUrl
     audio.load()
+    const savedPos = getPosition(ep.id)
+    if (savedPos > 0) audio.currentTime = savedPos
     audio.play().catch(() => {})
   }, [currentIndex, episodes])
 
@@ -200,7 +236,9 @@ export default function App() {
       clearTimeout(saveTimerRef.current)
       saveTimerRef.current = setTimeout(() => {
         if (currentIndex >= 0 && episodes[currentIndex]) {
-          savePlayback({ episodeId: episodes[currentIndex].id, time: audio.currentTime })
+          const ep = episodes[currentIndex]
+          savePlayback({ episodeId: ep.id, time: audio.currentTime })
+          savePosition(ep.id, audio.currentTime)
         }
       }, 5000)
     }
