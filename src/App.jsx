@@ -81,35 +81,6 @@ function getGreeting() {
   return 'Good evening'
 }
 
-const STUDY_DOMAINS = [
-  'Threats & Attacks',
-  'Cryptography & PKI',
-  'Identity & Access Mgmt',
-  'Network Security',
-  'Risk & GRC',
-]
-const STUDY_LINKS = [
-  { label: 'Prof Messer', url: 'https://www.professormesser.com/security-plus/sy0-701/sy0-701-video/sy0-701-comptia-security-702-course/' },
-  { label: 'Practice Tests', url: 'https://www.examcompass.com/comptia-security-plus-certification-exam-free-practice-test' },
-  { label: 'Flashcards', url: 'https://quizlet.com/subject/security-plus/' },
-  { label: 'Reddit', url: 'https://www.reddit.com/r/CompTIA/' },
-]
-const EXAM_DATE = new Date('2026-08-01')
-const STUDY_START = new Date('2026-01-01')
-
-function loadStudy() {
-  try { return JSON.parse(localStorage.getItem('dd-study')) || {} } catch { return {} }
-}
-function saveStudy(data) { localStorage.setItem('dd-study', JSON.stringify(data)) }
-
-function getStudyState() {
-  const s = loadStudy()
-  return {
-    studiedDays: s.studiedDays || [],   // array of 'YYYY-MM-DD' strings
-    domains: s.domains || [0, 0, 0, 0, 0], // 0-100 in steps of 20
-    xp: s.xp || 0,
-  }
-}
 
 function parseFeed(xml, feed, maxItems = 50) {
   const parser = new DOMParser()
@@ -201,60 +172,6 @@ export default function App() {
   const rainSourceRef = useRef(null)
   const rainGainRef = useRef(null)
   const sleepIntervalRef = useRef(null)
-
-  // Study tab
-  const [study, setStudy] = useState(getStudyState)
-
-  const todayStr = new Date().toISOString().split('T')[0]
-  const studiedToday = study.studiedDays.includes(todayStr)
-  const daysUntilExam = Math.max(0, Math.ceil((EXAM_DATE - new Date()) / 86400000))
-  const totalStudyDays = Math.max(1, Math.ceil((EXAM_DATE - STUDY_START) / 86400000))
-  const elapsedStudyDays = Math.max(0, Math.ceil((new Date() - STUDY_START) / 86400000))
-  const examProgress = Math.min(100, Math.round((elapsedStudyDays / totalStudyDays) * 100))
-  const studyLevel = Math.floor(study.xp / 100) + 1
-  const xpInLevel = study.xp % 100
-
-  function getWeekDays() {
-    const now = new Date()
-    const day = now.getDay() // 0=Sun
-    const mon = new Date(now); mon.setDate(now.getDate() - ((day + 6) % 7))
-    return ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((label, i) => {
-      const d = new Date(mon); d.setDate(mon.getDate() + i)
-      return { label, date: d.toISOString().split('T')[0] }
-    })
-  }
-
-  function getStreak() {
-    const days = [...study.studiedDays].sort().reverse()
-    let streak = 0; const d = new Date()
-    if (!days.includes(d.toISOString().split('T')[0])) {
-      d.setDate(d.getDate() - 1) // allow today not yet checked in
-      if (!days.includes(d.toISOString().split('T')[0])) return 0
-    } else {
-      // today is included, start counting from today
-      d.setDate(d.getDate()) // reset
-    }
-    for (let i = 0; i < 365; i++) {
-      const ds = d.toISOString().split('T')[0]
-      if (days.includes(ds)) { streak++; d.setDate(d.getDate() - 1) }
-      else break
-    }
-    return streak
-  }
-
-  function markStudied() {
-    if (studiedToday) return
-    const next = { ...study, studiedDays: [...study.studiedDays, todayStr], xp: study.xp + 25 }
-    setStudy(next); saveStudy(next)
-  }
-
-  function tapDomain(i) {
-    const doms = [...study.domains]
-    if (doms[i] >= 100) return
-    doms[i] = Math.min(100, doms[i] + 20)
-    const next = { ...study, domains: doms, xp: study.xp + 5 }
-    setStudy(next); saveStudy(next)
-  }
 
   const audioRef = useRef(null)
   const progressRef = useRef(null)
@@ -707,86 +624,10 @@ export default function App() {
         </div>
       )}
 
-      {/* === STUDY === */}
-      {tab === 'study' && (
-        <div className="tab-content">
-          <header className="home-header">
-            <h1>Study</h1>
-            <div className="study-xp-badge">Lv {studyLevel} · {study.xp} XP</div>
-          </header>
-
-          {/* Streak tracker */}
-          <div className="study-card">
-            <div className="study-card-header">
-              <span className="study-card-title">Weekly Streak</span>
-              <span className="streak-count">{getStreak()} day{getStreak() !== 1 ? 's' : ''}</span>
-            </div>
-            <div className="streak-dots">
-              {getWeekDays().map((d) => (
-                <div key={d.date} className="streak-dot-wrap">
-                  <div className={`streak-dot ${study.studiedDays.includes(d.date) ? 'filled' : ''} ${d.date === todayStr ? 'today' : ''}`} />
-                  <span className="streak-day-label">{d.label}</span>
-                </div>
-              ))}
-            </div>
-            <button className={`study-checkin-btn ${studiedToday ? 'done' : ''}`} onClick={markStudied}>
-              {studiedToday ? 'Studied Today +25 XP' : 'Mark Today as Studied'}
-            </button>
-          </div>
-
-          {/* XP bar */}
-          <div className="study-card">
-            <div className="study-card-header">
-              <span className="study-card-title">Level {studyLevel}</span>
-              <span className="xp-label">{xpInLevel}/100 XP</span>
-            </div>
-            <div className="xp-bar"><div className="xp-fill" style={{ width: `${xpInLevel}%` }} /></div>
-          </div>
-
-          {/* Exam countdown */}
-          <div className="study-card">
-            <div className="study-card-header">
-              <span className="study-card-title">Security+ Exam</span>
-              <span className="exam-days">{daysUntilExam} days left</span>
-            </div>
-            <div className="exam-date">Aug 1, 2026</div>
-            <div className="exam-bar"><div className="exam-fill" style={{ width: `${examProgress}%` }} /></div>
-          </div>
-
-          {/* Domain progress */}
-          <div className="study-card">
-            <span className="study-card-title">Domain Progress</span>
-            <div className="domain-list">
-              {STUDY_DOMAINS.map((name, i) => (
-                <div key={name} className="domain-row" onClick={() => tapDomain(i)}>
-                  <div className="domain-info">
-                    <span className="domain-name">{name}</span>
-                    <span className="domain-pct">{study.domains[i]}%</span>
-                  </div>
-                  <div className="domain-bar"><div className="domain-fill" style={{ width: `${study.domains[i]}%` }} /></div>
-                </div>
-              ))}
-            </div>
-            <div className="domain-hint">Tap a domain to add +20% progress (+5 XP)</div>
-          </div>
-
-          {/* Quick links */}
-          <div className="study-card">
-            <span className="study-card-title">Quick Links</span>
-            <div className="study-links">
-              {STUDY_LINKS.map((l) => (
-                <a key={l.label} href={l.url} target="_blank" rel="noopener noreferrer" className="study-link">{l.label}</a>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
       <nav className="tab-bar">
         <button className={`tab ${tab === 'library' || tab === 'detail' ? 'active' : ''}`} onClick={() => setTab('library')}><span className="tab-icon">☰</span>Library</button>
         <button className={`tab ${tab === 'playing' ? 'active' : ''}`} onClick={() => setTab('playing')}><span className="tab-icon">▶</span>Now Playing</button>
         <button className={`tab ${tab === 'search' || tab === 'preview' ? 'active' : ''}`} onClick={() => setTab('search')}><span className="tab-icon">⌕</span>Search</button>
-        <button className={`tab ${tab === 'study' ? 'active' : ''}`} onClick={() => setTab('study')}><span className="tab-icon">📖</span>Study</button>
       </nav>
     </div>
   )
