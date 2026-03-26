@@ -1,24 +1,26 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 
+// ── Constants ──
 const DEFAULT_FEEDS = [
-  { name: 'The Daily', short: 'TD', rssUrl: 'https://feeds.simplecast.com/54nAGcIl', color: '#6B4EFF', category: 'News' },
-  { name: 'Up First', short: 'NPR', rssUrl: 'https://feeds.npr.org/510318/podcast.xml', color: '#7C3AED', category: 'News' },
+  { name: 'The Daily', short: 'TD', rssUrl: 'https://feeds.simplecast.com/54nAGcIl', color: '#7c3aed', category: 'News' },
+  { name: 'Up First', short: 'NPR', rssUrl: 'https://feeds.npr.org/510318/podcast.xml', color: '#a855f7', category: 'News' },
 ]
 
-const CATEGORIES = ['All', 'News', 'Tech', 'Storytelling', 'Documentary', 'Other']
-const NEWS_CATEGORIES = ['News', 'Current Events', 'Politics', 'Daily News']
+const STUDY_DOMAINS = ['Threats & Attacks', 'Cryptography & PKI', 'Identity & Access Mgmt', 'Network Security', 'Risk & GRC']
+const STUDY_LINKS = [
+  { label: 'Prof Messer', url: 'https://www.professormesser.com/security-plus/sy0-701/sy0-701-video/sy0-701-comptia-security-702-course/' },
+  { label: 'Practice Tests', url: 'https://www.examcompass.com/comptia-security-plus-certification-exam-free-practice-test' },
+  { label: 'Flashcards', url: 'https://quizlet.com/subject/security-plus/' },
+  { label: 'Reddit', url: 'https://www.reddit.com/r/CompTIA/' },
+]
+const EXAM_DATE = new Date('2026-08-01')
+const STUDY_START = new Date('2026-01-01')
+const SPEED_OPTIONS = [1, 1.25, 1.5, 2]
+
+// ── Helpers ──
 const isDev = import.meta.env.DEV
 
-const RECOMMENDED = [
-  { name: 'Darknet Diaries', artist: 'Jack Rhysider', genre: 'Technology', id: 1296350194 },
-  { name: 'Radiolab', artist: 'WNYC Studios', genre: 'Science', id: 152249110 },
-  { name: 'Serial', artist: 'Serial Productions', genre: 'True Crime', id: 917918570 },
-  { name: 'How I Built This', artist: 'Guy Raz / NPR', genre: 'Business', id: 1150510297 },
-  { name: 'Planet Money', artist: 'NPR', genre: 'Business', id: 290783428 },
-  { name: '99% Invisible', artist: 'Roman Mars', genre: 'Design', id: 394775318 },
-]
-
-function getFeedFetchUrl(rssUrl) {
+function getFeedUrl(rssUrl) {
   if (isDev) {
     try {
       const u = new URL(rssUrl)
@@ -29,606 +31,576 @@ function getFeedFetchUrl(rssUrl) {
   return '/.netlify/functions/feed?url=' + encodeURIComponent(rssUrl)
 }
 
-function detectCategory(genres) {
-  if (!genres || !genres.length) return 'Other'
-  const g = genres.map((x) => (typeof x === 'string' ? x : x.name || '')).join(' ').toLowerCase()
-  if (/news|politics|current events|daily/.test(g)) return 'News'
-  if (/tech|science|computer/.test(g)) return 'Tech'
-  if (/story|fiction|drama|comedy/.test(g)) return 'Storytelling'
-  if (/documentary|history|true crime|investigat/.test(g)) return 'Documentary'
-  return 'Other'
-}
-
-function loadFeeds() {
-  try {
-    const stored = JSON.parse(localStorage.getItem('dd-feeds'))
-    if (Array.isArray(stored) && stored.length > 0) return stored.map((f) => ({ ...f, category: f.category || 'Other', color: f.color || '#6B4EFF' }))
-  } catch {}
-  return DEFAULT_FEEDS
-}
-function saveFeeds(feeds) { localStorage.setItem('dd-feeds', JSON.stringify(feeds)) }
-function loadPlayback() { try { return JSON.parse(localStorage.getItem('dd-playback')) } catch { return null } }
-function savePlayback(data) { localStorage.setItem('dd-playback', JSON.stringify(data)) }
-function loadPositions() { try { return JSON.parse(localStorage.getItem('dd-positions')) || {} } catch { return {} } }
-function savePosition(id, time) { const p = loadPositions(); p[id] = time; localStorage.setItem('dd-positions', JSON.stringify(p)) }
-function getPosition(id) { return loadPositions()[id] || 0 }
-function loadCachedEpisodes() {
-  try { const c = JSON.parse(localStorage.getItem('dd-episodes')); if (Array.isArray(c) && c.length > 0) return c.map((ep) => ({ ...ep, pubDate: new Date(ep.pubDate) })) } catch {}
-  return null
-}
-function cacheEpisodes(eps) { localStorage.setItem('dd-episodes', JSON.stringify(eps)) }
-function loadSearchHistory() { try { return JSON.parse(localStorage.getItem('dd-search-history')) || [] } catch { return [] } }
-function saveSearchHistory(h) { localStorage.setItem('dd-search-history', JSON.stringify(h.slice(0, 10))) }
-
-function formatTime(sec) {
-  if (!sec || isNaN(sec)) return '0:00'
-  const m = Math.floor(sec / 60); const s = Math.floor(sec % 60)
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-function formatDate(d) {
+function stripHtml(html) { if (!html) return ''; const t = document.createElement('div'); t.innerHTML = html; return t.textContent || '' }
+function fmtTime(sec) { if (!sec || isNaN(sec)) return '0:00'; const m = Math.floor(sec / 60); const s = Math.floor(sec % 60); return `${m}:${s.toString().padStart(2, '0')}` }
+function fmtDate(d) {
   const now = new Date(); const diff = now - d
   if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
   if (diff < 172800000) return 'Yesterday'
-  if (diff < 604800000) return d.toLocaleDateString('en-US', { weekday: 'short' })
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
-function stripHtml(html) { if (!html) return ''; const t = document.createElement('div'); t.innerHTML = html; return t.textContent || '' }
-function getGreeting() {
-  const h = new Date().getHours()
-  if (h < 12) return 'Good morning'
-  if (h < 17) return 'Good afternoon'
-  return 'Good evening'
+
+// ── LocalStorage ──
+function load(key, fallback) { try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback } catch { return fallback } }
+function save(key, val) { localStorage.setItem(key, JSON.stringify(val)) }
+
+function loadSettings() {
+  return load('dd-settings', { commuteMin: 30, songsBetween: 5, feeds: DEFAULT_FEEDS, rainVolume: 0.5 })
 }
 
+function loadStudy() {
+  return load('dd-study', { studiedDays: [], domains: [0, 0, 0, 0, 0], xp: 0 })
+}
 
-function parseFeed(xml, feed, maxItems = 50) {
-  const parser = new DOMParser()
-  const doc = parser.parseFromString(xml, 'text/xml')
+function loadMix() {
+  const m = load('dd-mix', null)
+  if (!m) return null
+  const today = new Date().toISOString().split('T')[0]
+  if (m.date !== today) return null
+  return m
+}
+
+function loadPositions() { return load('dd-positions', {}) }
+function savePosition(id, time) { const p = loadPositions(); p[id] = time; save('dd-positions', p) }
+function getPosition(id) { return loadPositions()[id] || 0 }
+
+// ── RSS Parser ──
+function parseFeed(xml, feed) {
+  const doc = new DOMParser().parseFromString(xml, 'text/xml')
   const items = doc.querySelectorAll('item')
   const channel = doc.querySelector('channel')
   const channelImg = channel?.querySelector('image > url')?.textContent || channel?.querySelector('*|image')?.getAttribute('href') || ''
-  const channelDesc = channel?.querySelector('description')?.textContent || ''
   const episodes = []
-  for (let i = 0; i < Math.min(items.length, maxItems); i++) {
+  for (let i = 0; i < Math.min(items.length, 5); i++) {
     const item = items[i]
     const title = item.querySelector('title')?.textContent || 'Untitled'
-    const enclosure = item.querySelector('enclosure')
-    const audioUrl = enclosure?.getAttribute('url')
+    const audioUrl = item.querySelector('enclosure')?.getAttribute('url')
     if (!audioUrl) continue
-    const pubDate = item.querySelector('pubDate')?.textContent
-    const duration = item.querySelector('duration')?.textContent
+    const dur = item.querySelector('duration')?.textContent
     const itemImg = item.querySelector('*|image')?.getAttribute('href')
-    const desc = stripHtml(item.querySelector('description')?.textContent || item.querySelector('*|summary')?.textContent || '').slice(0, 300)
+    const desc = stripHtml(item.querySelector('description')?.textContent || '').slice(0, 200)
     let durationSec = 0
-    if (duration) { const p = duration.split(':').map(Number); if (p.length === 3) durationSec = p[0]*3600+p[1]*60+p[2]; else if (p.length === 2) durationSec = p[0]*60+p[1]; else durationSec = p[0] }
-    episodes.push({ id: `${feed.short}-${i}`, title, audioUrl, durationSec, desc, pubDate: pubDate ? new Date(pubDate) : new Date(), artwork: itemImg || channelImg || feed.artwork || '', feedName: feed.name, feedShort: feed.short, feedColor: feed.color, category: feed.category || 'Other' })
+    if (dur) { const p = dur.split(':').map(Number); if (p.length === 3) durationSec = p[0]*3600+p[1]*60+p[2]; else if (p.length === 2) durationSec = p[0]*60+p[1]; else durationSec = p[0] }
+    episodes.push({
+      id: `pod-${feed.short}-${i}`,
+      type: 'podcast',
+      title, audioUrl, durationSec, desc,
+      artwork: itemImg || channelImg || feed.artwork || '',
+      feedName: feed.name, feedShort: feed.short, feedColor: feed.color,
+    })
   }
-  return { episodes, channelImg, channelDesc, totalCount: items.length }
+  return { episodes, channelImg }
 }
 
-function isRecent(pubDate, category) {
-  const hours = NEWS_CATEGORIES.includes(category) ? 36 : 168
-  return (Date.now() - pubDate.getTime()) < hours * 3600 * 1000
-}
-
-function updateMediaSession(episode, playing, handlers) {
-  if (!('mediaSession' in navigator)) return
-  const meta = { title: episode.title, artist: episode.feedName }
-  if (episode.artwork) meta.artwork = [{ src: episode.artwork, sizes: '512x512', type: 'image/jpeg' }]
-  navigator.mediaSession.metadata = new MediaMetadata(meta)
-  navigator.mediaSession.playbackState = playing ? 'playing' : 'paused'
-  for (const [action, handler] of Object.entries(handlers)) { try { navigator.mediaSession.setActionHandler(action, handler) } catch {} }
-}
-
-// Rain/white noise generator
-function createRainNoise(audioCtx) {
-  const bufferSize = audioCtx.sampleRate * 2
-  const buffer = audioCtx.createBuffer(2, bufferSize, audioCtx.sampleRate)
+// ── Rain Noise ──
+function createRainNoise(ctx) {
+  const buf = ctx.createBuffer(2, ctx.sampleRate * 2, ctx.sampleRate)
   for (let ch = 0; ch < 2; ch++) {
-    const data = buffer.getChannelData(ch)
-    let b0=0, b1=0, b2=0, b3=0, b4=0, b5=0, b6=0
-    for (let i = 0; i < bufferSize; i++) {
-      const white = Math.random() * 2 - 1
-      b0 = 0.99886*b0 + white*0.0555179; b1 = 0.99332*b1 + white*0.0750759
-      b2 = 0.96900*b2 + white*0.1538520; b3 = 0.86650*b3 + white*0.3104856
-      b4 = 0.55000*b4 + white*0.5329522; b5 = -0.7616*b5 - white*0.0168980
-      data[i] = (b0+b1+b2+b3+b4+b5+b6+white*0.5362) * 0.11
-      b6 = white * 0.115926
+    const d = buf.getChannelData(ch)
+    let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0
+    for (let i = 0; i < d.length; i++) {
+      const w = Math.random()*2-1
+      b0=0.99886*b0+w*0.0555179; b1=0.99332*b1+w*0.0750759
+      b2=0.96900*b2+w*0.1538520; b3=0.86650*b3+w*0.3104856
+      b4=0.55000*b4+w*0.5329522; b5=-0.7616*b5-w*0.0168980
+      d[i]=(b0+b1+b2+b3+b4+b5+b6+w*0.5362)*0.11; b6=w*0.115926
     }
   }
-  return buffer
+  return buf
 }
 
+// ── App ──
 export default function App() {
-  const [feeds, setFeeds] = useState(loadFeeds)
-  const [episodes, setEpisodes] = useState(() => loadCachedEpisodes() || [])
-  const [allEpisodesByFeed, setAllEpisodesByFeed] = useState({})
-  const [loading, setLoading] = useState(() => !loadCachedEpisodes())
-  const [error, setError] = useState(null)
-  const [currentIndex, setCurrentIndex] = useState(-1)
+  const [tab, setTab] = useState('player')
+  const [settings, setSettings] = useState(loadSettings)
+  const [study, setStudy] = useState(loadStudy)
+  const [mix, setMix] = useState([])
+  const [mixIndex, setMixIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
-  const [tab, setTab] = useState('library')
-  const [categoryFilter, setCategoryFilter] = useState('All')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState([])
-  const [searchHistory, setSearchHistory] = useState(loadSearchHistory)
-  const [detailFeed, setDetailFeed] = useState(null)
-  const [detailEpisodes, setDetailEpisodes] = useState([])
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [detailMeta, setDetailMeta] = useState(null)
-  const [previewPodcast, setPreviewPodcast] = useState(null)
-  const [previewEpisodes, setPreviewEpisodes] = useState([])
-  const [previewLoading, setPreviewLoading] = useState(false)
-  // Rain/sleep
+  const [speed, setSpeed] = useState(1)
+  const [building, setBuilding] = useState(false)
+  const [spotifyOk, setSpotifyOk] = useState(null)
   const [rainPlaying, setRainPlaying] = useState(false)
-  const [rainVolume, setRainVolume] = useState(0.5)
-  const [sleepTimer, setSleepTimer] = useState(0) // minutes, 0 = continuous
-  const [sleepRemaining, setSleepRemaining] = useState(0)
-  const [showSleep, setShowSleep] = useState(false)
-  const rainCtxRef = useRef(null)
-  const rainSourceRef = useRef(null)
-  const rainGainRef = useRef(null)
-  const sleepIntervalRef = useRef(null)
 
   const audioRef = useRef(null)
   const progressRef = useRef(null)
-  const saveTimerRef = useRef(null)
+  const saveTimer = useRef(null)
+  const rainCtx = useRef(null)
+  const rainSource = useRef(null)
+  const rainGain = useRef(null)
 
-  // Auto-refresh at 6am Chicago time
-  useEffect(() => {
-    function scheduleRefresh() {
-      const now = new Date()
-      const chicago = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' }))
-      const next6am = new Date(chicago)
-      next6am.setHours(6, 0, 0, 0)
-      if (chicago >= next6am) next6am.setDate(next6am.getDate() + 1)
-      const ms = next6am - chicago
-      return setTimeout(() => { fetchAllFeeds(feeds); scheduleRefresh() }, ms)
+  const current = mix[mixIndex] || null
+
+  // ── Build Mix ──
+  const buildMix = useCallback(async (force = false) => {
+    if (!force) {
+      const cached = loadMix()
+      if (cached) { setMix(cached.items); return cached.items }
     }
-    const timer = scheduleRefresh()
-    return () => clearTimeout(timer)
-  }, [feeds]) // eslint-disable-line
+    setBuilding(true)
+    const items = []
 
-  // Rain controls
-  function toggleRain() {
-    if (rainPlaying) { stopRain(); return }
-    const ctx = new (window.AudioContext || window.webkitAudioContext)()
-    const gain = ctx.createGain()
-    gain.gain.value = rainVolume
-    gain.connect(ctx.destination)
-    const buffer = createRainNoise(ctx)
-    const source = ctx.createBufferSource()
-    source.buffer = buffer; source.loop = true
-    source.connect(gain); source.start()
-    rainCtxRef.current = ctx; rainSourceRef.current = source; rainGainRef.current = gain
-    setRainPlaying(true)
-    if (sleepTimer > 0) startSleepTimer(sleepTimer)
-  }
-
-  function stopRain() {
-    try { rainSourceRef.current?.stop(); rainCtxRef.current?.close() } catch {}
-    rainCtxRef.current = null; rainSourceRef.current = null; rainGainRef.current = null
-    setRainPlaying(false); setSleepRemaining(0)
-    clearInterval(sleepIntervalRef.current)
-  }
-
-  function updateRainVolume(v) {
-    setRainVolume(v)
-    if (rainGainRef.current) rainGainRef.current.gain.value = v
-  }
-
-  function startSleepTimer(mins) {
-    setSleepRemaining(mins * 60)
-    clearInterval(sleepIntervalRef.current)
-    sleepIntervalRef.current = setInterval(() => {
-      setSleepRemaining((prev) => {
-        if (prev <= 1) { stopRain(); const a = audioRef.current; if (a) a.pause(); return 0 }
-        // Fade out in last 30 seconds
-        if (prev <= 30 && rainGainRef.current) rainGainRef.current.gain.value = rainVolume * (prev / 30)
-        return prev - 1
-      })
-    }, 1000)
-  }
-
-  const fetchAllFeeds = useCallback(async (feedList) => {
-    setLoading(true); setError(null)
-    try {
-      const results = await Promise.allSettled(feedList.map(async (feed) => {
-        const res = await fetch(getFeedFetchUrl(feed.rssUrl))
-        if (!res.ok) throw new Error(`Failed: ${feed.name}`)
+    // Fetch podcasts
+    const podEpisodes = []
+    for (const feed of settings.feeds) {
+      try {
+        const res = await fetch(getFeedUrl(feed.rssUrl))
+        if (!res.ok) continue
         const xml = await res.text()
-        return { feed, ...parseFeed(xml, feed, 50) }
-      }))
-      const byFeed = {}; const recentEps = []
-      results.filter((r) => r.status === 'fulfilled').forEach((r) => {
-        const { feed, episodes: eps, channelImg, channelDesc, totalCount } = r.value
-        byFeed[feed.name] = { episodes: eps, channelImg, channelDesc, totalCount, feed }
-        eps.filter((ep) => isRecent(ep.pubDate, ep.category)).forEach((ep) => recentEps.push(ep))
-      })
-      recentEps.sort((a, b) => b.pubDate - a.pubDate)
-      const finalEps = recentEps.length > 0 ? recentEps : Object.values(byFeed).flatMap((b) => b.episodes.slice(0, 3)).sort((a, b) => b.pubDate - a.pubDate)
-      setEpisodes(finalEps); setAllEpisodesByFeed(byFeed); cacheEpisodes(finalEps)
-      if (results.every((r) => r.status === 'rejected')) setError('Could not load any feeds.')
-      return finalEps
-    } catch (e) { setError(e.message); return [] }
-    finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => {
-    const saved = loadPlayback(); const cached = loadCachedEpisodes()
-    if (saved && cached?.length > 0) {
-      const idx = cached.findIndex((ep) => ep.id === saved.episodeId)
-      if (idx >= 0) { setCurrentIndex(idx); setTimeout(() => { const a = audioRef.current; if (a) { a.src = cached[idx].audioUrl; a.load(); a.currentTime = saved.time || 0 } }, 100) }
+        const { episodes } = parseFeed(xml, feed)
+        if (episodes.length > 0) podEpisodes.push(episodes[0])
+      } catch {}
     }
-    fetchAllFeeds(feeds)
-  }, []) // eslint-disable-line
 
-  const playEpisode = useCallback((index) => { setCurrentIndex(index); setPlaying(true); setCurrentTime(0); setDuration(0); setTab('playing') }, [])
-
-  function playEpisodeDirect(ep) {
-    const idx = episodes.findIndex((e) => e.id === ep.id)
-    if (idx >= 0) { playEpisode(idx); return }
-    const newEps = [ep, ...episodes]; setEpisodes(newEps)
-    setCurrentIndex(0); setPlaying(true); setCurrentTime(0); setDuration(0); setTab('playing')
-  }
-
-  useEffect(() => {
-    const audio = audioRef.current; if (!audio || currentIndex < 0 || !episodes[currentIndex]) return
-    const ep = episodes[currentIndex]; audio.src = ep.audioUrl; audio.load()
-    const savedPos = getPosition(ep.id); if (savedPos > 0) audio.currentTime = savedPos
-    audio.play().catch(() => {})
-  }, [currentIndex, episodes])
-
-  useEffect(() => {
-    const audio = audioRef.current; if (!audio) return
-    const onTime = () => { setCurrentTime(audio.currentTime); clearTimeout(saveTimerRef.current); saveTimerRef.current = setTimeout(() => { if (currentIndex >= 0 && episodes[currentIndex]) { const ep = episodes[currentIndex]; savePlayback({ episodeId: ep.id, time: audio.currentTime }); savePosition(ep.id, audio.currentTime) } }, 5000) }
-    const onDur = () => setDuration(audio.duration)
-    const onEnd = () => { if (currentIndex < episodes.length - 1) playEpisode(currentIndex + 1); else setPlaying(false) }
-    const onPlay = () => setPlaying(true); const onPause = () => setPlaying(false)
-    audio.addEventListener('timeupdate', onTime); audio.addEventListener('durationchange', onDur); audio.addEventListener('ended', onEnd); audio.addEventListener('play', onPlay); audio.addEventListener('pause', onPause)
-    return () => { audio.removeEventListener('timeupdate', onTime); audio.removeEventListener('durationchange', onDur); audio.removeEventListener('ended', onEnd); audio.removeEventListener('play', onPlay); audio.removeEventListener('pause', onPause) }
-  }, [currentIndex, episodes, playEpisode])
-
-  useEffect(() => {
-    if (currentIndex < 0 || !episodes[currentIndex]) return; const audio = audioRef.current
-    updateMediaSession(episodes[currentIndex], playing, {
-      play: () => audio?.play(), pause: () => audio?.pause(),
-      seekbackward: () => { if (audio) audio.currentTime = Math.max(0, audio.currentTime - 15) },
-      seekforward: () => { if (audio) audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 30) },
-      previoustrack: currentIndex > 0 ? () => playEpisode(currentIndex - 1) : null,
-      nexttrack: currentIndex < episodes.length - 1 ? () => playEpisode(currentIndex + 1) : null,
-    })
-  }, [currentIndex, playing, episodes, playEpisode])
-
-  function togglePlay() { const a = audioRef.current; if (!a) return; if (currentIndex < 0 && episodes.length > 0) { playEpisode(0); return }; if (playing) a.pause(); else a.play().catch(() => {}) }
-  function seekFromEvent(clientX) { const a = audioRef.current; const bar = progressRef.current; if (!a || !bar || !duration) return; const rect = bar.getBoundingClientRect(); a.currentTime = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * duration }
-  function skip(sec) { const a = audioRef.current; if (a) a.currentTime = Math.max(0, Math.min(a.duration || 0, a.currentTime + sec)) }
-
-  function removeFeed(index) { const next = feeds.filter((_, i) => i !== index); setFeeds(next); saveFeeds(next); fetchAllFeeds(next) }
-
-  function addFromSearch(result) {
-    if (!result.feedUrl || feeds.some((f) => f.rssUrl === result.feedUrl)) return
-    const short = (result.collectionName || '').slice(0, 3).toUpperCase() || 'POD'
-    const cat = detectCategory(result.genres || [result.primaryGenreName])
-    const nf = { name: result.collectionName, short, rssUrl: result.feedUrl, color: '#6B4EFF', category: cat, artwork: result.artworkUrl100 }
-    const next = [...feeds, nf]; setFeeds(next); saveFeeds(next); fetchAllFeeds(next)
-  }
-
-  async function searchPodcasts(q) {
-    const query = q || searchQuery; if (!query.trim()) return
-    const hist = [query, ...searchHistory.filter((h) => h !== query)].slice(0, 10)
-    setSearchHistory(hist); saveSearchHistory(hist)
+    // Fetch Spotify tracks
+    let songs = []
     try {
-      const res = await fetch(`https://itunes.apple.com/search?media=podcast&limit=12&term=${encodeURIComponent(query)}`)
-      const data = await res.json(); setSearchResults(data.results || [])
-    } catch { setSearchResults([]) }
-  }
-
-  async function openFeedDetail(feedName) {
-    const cached = allEpisodesByFeed[feedName]
-    if (cached) { setDetailFeed(cached.feed); setDetailEpisodes(cached.episodes); setDetailMeta({ desc: cached.channelDesc, img: cached.channelImg, count: cached.totalCount }); setTab('detail'); return }
-    const feed = feeds.find((f) => f.name === feedName); if (!feed) return
-    setDetailFeed(feed); setDetailLoading(true); setTab('detail')
-    try { const res = await fetch(getFeedFetchUrl(feed.rssUrl)); const xml = await res.text(); const { episodes: eps, channelImg, channelDesc, totalCount } = parseFeed(xml, feed, 100); setDetailEpisodes(eps); setDetailMeta({ desc: channelDesc, img: channelImg, count: totalCount }) }
-    catch { setDetailEpisodes([]) } finally { setDetailLoading(false) }
-  }
-
-  async function openPreview(result) {
-    if (!result.feedUrl) return
-    setPreviewPodcast(result); setPreviewLoading(true); setPreviewEpisodes([]); setTab('preview')
-    try { const res = await fetch(getFeedFetchUrl(result.feedUrl)); const xml = await res.text(); const short = (result.collectionName || '').slice(0, 3).toUpperCase(); const ff = { name: result.collectionName, short, rssUrl: result.feedUrl, color: '#6B4EFF', category: detectCategory(result.genres || [result.primaryGenreName]), artwork: result.artworkUrl100 }; const { episodes: eps } = parseFeed(xml, ff, 50); setPreviewEpisodes(eps) }
-    catch { setPreviewEpisodes([]) } finally { setPreviewLoading(false) }
-  }
-
-  async function addRecommended(rec) {
-    try {
-      const res = await fetch(`https://itunes.apple.com/lookup?id=${rec.id}&entity=podcast`)
-      const data = await res.json()
-      if (data.results?.[0]) addFromSearch(data.results[0])
-    } catch {}
-  }
-
-  function buildCommuteMix(targetMin = 30) {
-    const target = targetMin * 60
-    const positions = loadPositions()
-    const pool = [...episodes].filter((ep) => ep.durationSec > 0)
-    const news = pool.filter((ep) => NEWS_CATEGORIES.includes(ep.category))
-    const other = pool.filter((ep) => !NEWS_CATEGORIES.includes(ep.category))
-    const mix = []; let total = 0
-    const remaining = (ep) => { const pos = positions[ep.id] || 0; return Math.max(ep.durationSec - pos, 60) }
-    // 1. Add latest news from each feed
-    const newsByFeed = {}
-    news.forEach((ep) => { if (!newsByFeed[ep.feedName]) newsByFeed[ep.feedName] = ep })
-    for (const ep of Object.values(newsByFeed)) {
-      mix.push(ep); total += remaining(ep)
-    }
-    // 2. If under target, fill with other episodes (alternate feeds)
-    if (total < target) {
-      const otherByFeed = {}
-      other.forEach((ep) => { if (!otherByFeed[ep.feedName]) otherByFeed[ep.feedName] = []; otherByFeed[ep.feedName].push(ep) })
-      const feedQueues = Object.values(otherByFeed)
-      let qi = 0; let passes = 0
-      while (total < target && passes < pool.length && feedQueues.length > 0) {
-        passes++
-        const q = feedQueues[qi % feedQueues.length]
-        const ep = q.shift()
-        if (!ep) { feedQueues.splice(qi % feedQueues.length, 1); continue }
-        if (mix.some((m) => m.id === ep.id)) { qi++; continue }
-        mix.push(ep); total += remaining(ep); qi++
+      const tokenRes = await fetch('/.netlify/functions/spotify?action=token', { method: 'POST' })
+      const tokenData = await tokenRes.json()
+      if (tokenData.accessToken) {
+        setSpotifyOk(true)
+        const tracksRes = await fetch('/.netlify/functions/spotify?action=top-tracks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken: tokenData.accessToken }),
+        })
+        const tracksData = await tracksRes.json()
+        songs = (tracksData.tracks || []).filter((t) => t.previewUrl).map((t) => ({
+          id: `song-${t.id}`,
+          type: 'song',
+          title: t.title,
+          artist: t.artist,
+          artwork: t.albumArt,
+          audioUrl: t.previewUrl,
+          durationSec: Math.round(t.durationMs / 1000),
+          previewDuration: 30,
+        }))
+        // Shuffle songs
+        for (let i = songs.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [songs[i], songs[j]] = [songs[j], songs[i]] }
+      } else {
+        setSpotifyOk(false)
       }
+    } catch { setSpotifyOk(false) }
+
+    // Interleave: podcast → N songs → podcast → N songs
+    const target = settings.commuteMin * 60
+    let totalSec = 0; let si = 0; let pi = 0
+    while (totalSec < target && (pi < podEpisodes.length || si < songs.length)) {
+      // Add podcast
+      if (pi < podEpisodes.length) {
+        const ep = podEpisodes[pi % podEpisodes.length]
+        items.push(ep)
+        totalSec += ep.durationSec || 1200
+        pi++
+      }
+      // Add N songs
+      for (let s = 0; s < settings.songsBetween && si < songs.length && totalSec < target; s++) {
+        items.push(songs[si])
+        totalSec += 30 // preview duration
+        si++
+      }
+      // If we've used all podcasts, wrap around
+      if (pi >= podEpisodes.length && podEpisodes.length > 0) pi = 0
+      if (si >= songs.length && items.length > 0) break
     }
-    // 3. If still under, add more news episodes
-    for (const ep of news) {
-      if (total >= target) break
-      if (mix.some((m) => m.id === ep.id)) continue
-      mix.push(ep); total += remaining(ep)
+
+    // If no songs, just podcasts
+    if (items.length === 0 && podEpisodes.length > 0) {
+      items.push(...podEpisodes)
     }
-    return { mix, totalMin: Math.round(total / 60) }
+
+    setMix(items)
+    save('dd-mix', { date: new Date().toISOString().split('T')[0], items })
+    setBuilding(false)
+    return items
+  }, [settings])
+
+  // Init
+  useEffect(() => { buildMix() }, [buildMix])
+
+  // ── Audio Events ──
+  useEffect(() => {
+    const a = audioRef.current; if (!a || !current) return
+    a.src = current.audioUrl; a.load()
+    if (current.type === 'podcast') {
+      const pos = getPosition(current.id); if (pos > 0) a.currentTime = pos
+    }
+    a.playbackRate = current.type === 'podcast' ? speed : 1
+    if (playing) a.play().catch(() => {})
+  }, [mixIndex, current?.id]) // eslint-disable-line
+
+  useEffect(() => {
+    const a = audioRef.current; if (!a) return
+    const onTime = () => {
+      setCurrentTime(a.currentTime)
+      clearTimeout(saveTimer.current)
+      saveTimer.current = setTimeout(() => {
+        if (current?.type === 'podcast') savePosition(current.id, a.currentTime)
+      }, 3000)
+    }
+    const onDur = () => setDuration(a.duration)
+    const onEnd = () => { if (mixIndex < mix.length - 1) { setMixIndex(mixIndex + 1) } else setPlaying(false) }
+    const onPlay = () => setPlaying(true)
+    const onPause = () => setPlaying(false)
+    a.addEventListener('timeupdate', onTime); a.addEventListener('durationchange', onDur)
+    a.addEventListener('ended', onEnd); a.addEventListener('play', onPlay); a.addEventListener('pause', onPause)
+    return () => { a.removeEventListener('timeupdate', onTime); a.removeEventListener('durationchange', onDur); a.removeEventListener('ended', onEnd); a.removeEventListener('play', onPlay); a.removeEventListener('pause', onPause) }
+  }, [mixIndex, mix.length, current])
+
+  // Media Session
+  useEffect(() => {
+    if (!current || !('mediaSession' in navigator)) return
+    const meta = { title: current.title, artist: current.type === 'podcast' ? current.feedName : current.artist }
+    if (current.artwork) meta.artwork = [{ src: current.artwork, sizes: '512x512', type: 'image/jpeg' }]
+    navigator.mediaSession.metadata = new MediaMetadata(meta)
+    navigator.mediaSession.playbackState = playing ? 'playing' : 'paused'
+    const a = audioRef.current
+    const h = {
+      play: () => a?.play(), pause: () => a?.pause(),
+      seekbackward: () => { if (a) a.currentTime = Math.max(0, a.currentTime - 15) },
+      seekforward: () => { if (a) a.currentTime = Math.min(a.duration || 0, a.currentTime + 30) },
+      previoustrack: mixIndex > 0 ? () => setMixIndex(mixIndex - 1) : null,
+      nexttrack: mixIndex < mix.length - 1 ? () => setMixIndex(mixIndex + 1) : null,
+    }
+    for (const [act, fn] of Object.entries(h)) { try { navigator.mediaSession.setActionHandler(act, fn) } catch {} }
+  }, [current, playing, mixIndex, mix.length])
+
+  // ── Controls ──
+  function togglePlay() {
+    const a = audioRef.current; if (!a) return
+    if (!current && mix.length > 0) { setMixIndex(0); setPlaying(true); return }
+    if (playing) a.pause(); else a.play().catch(() => {})
+  }
+  function seek(clientX) {
+    const a = audioRef.current; const bar = progressRef.current
+    if (!a || !bar || !duration) return
+    const r = bar.getBoundingClientRect()
+    a.currentTime = Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * duration
+  }
+  function skip(sec) { const a = audioRef.current; if (a) a.currentTime = Math.max(0, Math.min(a.duration || 0, a.currentTime + sec)) }
+  function cycleSpeed() {
+    const next = SPEED_OPTIONS[(SPEED_OPTIONS.indexOf(speed) + 1) % SPEED_OPTIONS.length]
+    setSpeed(next)
+    const a = audioRef.current; if (a && current?.type === 'podcast') a.playbackRate = next
+  }
+  function jumpTo(i) { setMixIndex(i); setPlaying(true); setTab('player') }
+
+  // ── Rain ──
+  function toggleRain() {
+    if (rainPlaying) {
+      try { rainSource.current?.stop(); rainCtx.current?.close() } catch {}
+      setRainPlaying(false); return
+    }
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const gain = ctx.createGain(); gain.gain.value = settings.rainVolume; gain.connect(ctx.destination)
+    const src = ctx.createBufferSource(); src.buffer = createRainNoise(ctx); src.loop = true; src.connect(gain); src.start()
+    rainCtx.current = ctx; rainSource.current = src; rainGain.current = gain
+    setRainPlaying(true)
+  }
+  function setRainVol(v) {
+    updateSetting('rainVolume', v)
+    if (rainGain.current) rainGain.current.gain.value = v
   }
 
-  function playCommuteMix() {
-    const { mix } = buildCommuteMix(30)
-    if (mix.length === 0) return
-    setEpisodes(mix)
-    setCurrentIndex(0); setPlaying(true); setCurrentTime(0); setDuration(0); setTab('playing')
+  // ── Settings ──
+  function updateSetting(key, val) {
+    const next = { ...settings, [key]: val }; setSettings(next); save('dd-settings', next)
+  }
+  function addFeed(name, rssUrl, category = 'Other') {
+    if (settings.feeds.some((f) => f.rssUrl === rssUrl)) return
+    const short = name.slice(0, 3).toUpperCase()
+    updateSetting('feeds', [...settings.feeds, { name, short, rssUrl, color: '#7c3aed', category }])
+  }
+  function removeFeed(i) {
+    updateSetting('feeds', settings.feeds.filter((_, idx) => idx !== i))
   }
 
-  const current = currentIndex >= 0 ? episodes[currentIndex] : null
+  // ── Study ──
+  const todayStr = new Date().toISOString().split('T')[0]
+  const studiedToday = study.studiedDays.includes(todayStr)
+  const daysLeft = Math.max(0, Math.ceil((EXAM_DATE - new Date()) / 86400000))
+  const examPct = Math.min(100, Math.round((Math.max(0, new Date() - STUDY_START) / (EXAM_DATE - STUDY_START)) * 100))
+  const studyLevel = Math.floor(study.xp / 100) + 1
+  const xpInLevel = study.xp % 100
+
+  function getWeekDays() {
+    const now = new Date(); const day = now.getDay()
+    const mon = new Date(now); mon.setDate(now.getDate() - ((day + 6) % 7))
+    return ['M','T','W','T','F','S','S'].map((l, i) => {
+      const d = new Date(mon); d.setDate(mon.getDate() + i)
+      return { label: l, date: d.toISOString().split('T')[0] }
+    })
+  }
+  function getStreak() {
+    const days = new Set(study.studiedDays); let s = 0; const d = new Date()
+    if (!days.has(d.toISOString().split('T')[0])) { d.setDate(d.getDate() - 1); if (!days.has(d.toISOString().split('T')[0])) return 0 }
+    for (let i = 0; i < 365; i++) { if (days.has(d.toISOString().split('T')[0])) { s++; d.setDate(d.getDate() - 1) } else break }
+    return s
+  }
+  function markStudied() {
+    if (studiedToday) return
+    const next = { ...study, studiedDays: [...study.studiedDays, todayStr], xp: study.xp + 25 }
+    setStudy(next); save('dd-study', next)
+  }
+  function tapDomain(i) {
+    if (study.domains[i] >= 100) return
+    const doms = [...study.domains]; doms[i] = Math.min(100, doms[i] + 20)
+    const next = { ...study, domains: doms, xp: study.xp + 5 }
+    setStudy(next); save('dd-study', next)
+  }
+
+  // ── Derived ──
   const pct = duration > 0 ? (currentTime / duration) * 100 : 0
-  const filteredEpisodes = categoryFilter === 'All' ? episodes : episodes.filter((ep) => ep.category === categoryFilter)
-  const upNext = episodes.filter((_, i) => i !== currentIndex && i > currentIndex).slice(0, 5)
-  const recsToShow = RECOMMENDED.filter((r) => !feeds.some((f) => f.name === r.name))
-  const commuteMix = buildCommuteMix(30)
+  const peek = mix.slice(mixIndex + 1, mixIndex + 4)
+  const bgArt = current?.artwork || ''
 
   return (
     <div className="app">
       <audio ref={audioRef} preload="metadata" />
 
-      {current && tab !== 'playing' && (
-        <div className="mini-player" onClick={() => setTab('playing')}>
-          {current.artwork ? <img src={current.artwork} alt="" className="mini-art" /> : <div className="mini-badge" style={{ background: current.feedColor }}>{current.feedShort}</div>}
-          <div className="mini-info"><div className="mini-title">{current.title}</div><div className="mini-meta">{current.feedName}</div></div>
+      {/* ═══ PLAYER TAB ═══ */}
+      {tab === 'player' && (
+        <div className="tab-content player-screen">
+          {bgArt && <div className="player-bg" style={{ backgroundImage: `url(${bgArt})` }} />}
+          <div className="player-overlay" />
+
+          {building ? (
+            <div className="building">
+              <div className="building-spinner" />
+              <div className="building-text">Building your mix...</div>
+              <div className="building-sub">Fetching podcasts & songs</div>
+            </div>
+          ) : !current ? (
+            <div className="building">
+              <div className="building-text">No mix yet</div>
+              <div className="building-sub">Add podcasts in Settings, then rebuild</div>
+            </div>
+          ) : (
+            <div className="player-content">
+              <div className="player-art-wrap">
+                {current.artwork ? <img src={current.artwork} alt="" className="player-art" /> : <div className="player-art player-art-fallback">{current.feedShort || '?'}</div>}
+              </div>
+              <div className="player-info">
+                <div className="player-type-badge">{current.type === 'podcast' ? current.feedName : current.artist}</div>
+                <h2 className="player-title">{current.title}</h2>
+              </div>
+              <div className="player-progress">
+                <div className="progress-bar" ref={progressRef} onClick={(e) => seek(e.clientX)} onTouchStart={(e) => seek(e.touches[0].clientX)} onTouchMove={(e) => seek(e.touches[0].clientX)}>
+                  <div className="progress-fill" style={{ width: `${pct}%` }} />
+                </div>
+                <div className="time-row"><span>{fmtTime(currentTime)}</span><span>{fmtTime(duration)}</span></div>
+              </div>
+              <div className="player-controls">
+                <button className="ctrl-btn" onClick={() => skip(-15)}>-15</button>
+                <button className="ctrl-btn" onClick={() => mixIndex > 0 && setMixIndex(mixIndex - 1)}>⏮</button>
+                <button className="play-btn" onClick={togglePlay}>{playing ? '❚❚' : '▶'}</button>
+                <button className="ctrl-btn" onClick={() => mixIndex < mix.length - 1 && setMixIndex(mixIndex + 1)}>⏭</button>
+                <button className="ctrl-btn" onClick={() => skip(30)}>+30</button>
+              </div>
+              {current.type === 'podcast' && (
+                <button className="speed-btn" onClick={cycleSpeed}>{speed}x</button>
+              )}
+              {peek.length > 0 && (
+                <div className="peek">
+                  <div className="peek-label">Up next</div>
+                  {peek.map((item, i) => (
+                    <div key={item.id + i} className="peek-item" onClick={() => jumpTo(mixIndex + 1 + i)}>
+                      {item.artwork && <img src={item.artwork} alt="" className="peek-art" />}
+                      <div className="peek-info">
+                        <div className="peek-title">{item.title}</div>
+                        <div className="peek-meta">{item.type === 'podcast' ? item.feedName : item.artist}</div>
+                      </div>
+                      <span className={`peek-dot ${item.type}`} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ═══ QUEUE TAB ═══ */}
+      {tab === 'queue' && (
+        <div className="tab-content">
+          <header className="tab-header">
+            <h1>Today's Mix</h1>
+            <button className="rebuild-btn" onClick={() => buildMix(true)} disabled={building}>{building ? 'Building...' : 'Rebuild'}</button>
+          </header>
+          {mix.length === 0 && !building && <div className="empty">No mix built yet. Check Settings for podcast feeds.</div>}
+          {building && <div className="skeleton-list">{[...Array(6)].map((_, i) => <div key={i} className="skeleton-row"><div className="skeleton-art" /><div className="skeleton-lines"><div className="skeleton-line w60" /><div className="skeleton-line w40" /></div></div>)}</div>}
+          <div className="queue-list">
+            {mix.map((item, i) => (
+              <div key={item.id + i} className={`queue-item ${i === mixIndex ? 'active' : ''} ${item.type}`} onClick={() => jumpTo(i)}>
+                <div className="queue-num">{i + 1}</div>
+                {item.artwork ? <img src={item.artwork} alt="" className="queue-art" /> : <div className="queue-art queue-art-fallback" style={{ background: item.feedColor }}>{item.feedShort}</div>}
+                <div className="queue-info">
+                  <div className="queue-title">{item.title}</div>
+                  <div className="queue-meta">{item.type === 'podcast' ? item.feedName : item.artist} · {item.type === 'song' ? '0:30' : fmtTime(item.durationSec)}</div>
+                </div>
+                <span className={`queue-type-dot ${item.type}`} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ STUDY TAB ═══ */}
+      {tab === 'study' && (
+        <div className="tab-content">
+          <header className="tab-header">
+            <h1>Study</h1>
+            <span className="xp-badge">Lv {studyLevel} · {study.xp} XP</span>
+          </header>
+
+          <div className="card">
+            <div className="card-row"><span className="card-label">Streak</span><span className="accent-text">{getStreak()} day{getStreak() !== 1 ? 's' : ''}</span></div>
+            <div className="streak-dots">
+              {getWeekDays().map((d) => (
+                <div key={d.date} className="dot-wrap">
+                  <div className={`dot ${study.studiedDays.includes(d.date) ? 'filled' : ''} ${d.date === todayStr ? 'today' : ''}`} />
+                  <span className="dot-label">{d.label}</span>
+                </div>
+              ))}
+            </div>
+            <button className={`checkin-btn ${studiedToday ? 'done' : ''}`} onClick={markStudied}>
+              {studiedToday ? 'Done +25 XP' : 'Mark Studied'}
+            </button>
+          </div>
+
+          <div className="card">
+            <div className="card-row"><span className="card-label">Level {studyLevel}</span><span className="accent-text">{xpInLevel}/100</span></div>
+            <div className="bar"><div className="bar-fill xp" style={{ width: `${xpInLevel}%` }} /></div>
+          </div>
+
+          <div className="card">
+            <div className="card-row"><span className="card-label">Security+</span><span className="accent-text">{daysLeft}d left</span></div>
+            <div className="card-sub">Aug 1, 2026</div>
+            <div className="bar"><div className="bar-fill exam" style={{ width: `${examPct}%` }} /></div>
+          </div>
+
+          <div className="card">
+            <span className="card-label">Domains</span>
+            <div className="domain-list">
+              {STUDY_DOMAINS.map((name, i) => (
+                <div key={name} className="domain-row" onClick={() => tapDomain(i)}>
+                  <div className="domain-top"><span>{name}</span><span className="accent-text">{study.domains[i]}%</span></div>
+                  <div className="bar sm"><div className="bar-fill" style={{ width: `${study.domains[i]}%` }} /></div>
+                </div>
+              ))}
+            </div>
+            <div className="hint">Tap +20% (+5 XP)</div>
+          </div>
+
+          <div className="card">
+            <span className="card-label">Links</span>
+            <div className="link-grid">
+              {STUDY_LINKS.map((l) => (
+                <a key={l.label} href={l.url} target="_blank" rel="noopener noreferrer" className="link-btn">{l.label}</a>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ SETTINGS TAB ═══ */}
+      {tab === 'settings' && (
+        <div className="tab-content">
+          <header className="tab-header"><h1>Settings</h1></header>
+
+          <div className="card">
+            <div className="card-row">
+              <span className="card-label">Spotify</span>
+              <span className={`status-dot ${spotifyOk === true ? 'green' : spotifyOk === false ? 'red' : 'gray'}`} />
+            </div>
+            <div className="card-sub">{spotifyOk === true ? 'Connected — using your top tracks' : spotifyOk === false ? 'Not connected — add env vars in Netlify' : 'Checking...'}</div>
+          </div>
+
+          <div className="card">
+            <span className="card-label">Mix Length</span>
+            <div className="pill-row">
+              {[15, 30, 45, 60].map((m) => (
+                <button key={m} className={`pill ${settings.commuteMin === m ? 'active' : ''}`} onClick={() => updateSetting('commuteMin', m)}>{m}m</button>
+              ))}
+            </div>
+          </div>
+
+          <div className="card">
+            <span className="card-label">Songs Between Podcasts</span>
+            <div className="pill-row">
+              {[3, 5, 7].map((n) => (
+                <button key={n} className={`pill ${settings.songsBetween === n ? 'active' : ''}`} onClick={() => updateSetting('songsBetween', n)}>{n}</button>
+              ))}
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-row">
+              <span className="card-label">Rain Sounds</span>
+              <button className={`rain-btn ${rainPlaying ? 'on' : ''}`} onClick={toggleRain}>{rainPlaying ? 'Stop' : 'Play'}</button>
+            </div>
+            <div className="card-row" style={{ marginTop: 8 }}>
+              <span className="card-sub-inline">Volume</span>
+              <input type="range" min="0" max="1" step="0.05" value={settings.rainVolume} onChange={(e) => setRainVol(+e.target.value)} className="slider" />
+            </div>
+          </div>
+
+          <div className="card">
+            <span className="card-label">Podcast Feeds</span>
+            {settings.feeds.map((f, i) => (
+              <div key={f.rssUrl} className="feed-row">
+                <div className="feed-info"><span className="feed-name">{f.name}</span><span className="feed-cat">{f.category}</span></div>
+                <button className="feed-remove" onClick={() => removeFeed(i)}>×</button>
+              </div>
+            ))}
+            <AddFeedForm onAdd={addFeed} />
+          </div>
+        </div>
+      )}
+
+      {/* ═══ MINI PLAYER ═══ */}
+      {current && tab !== 'player' && (
+        <div className="mini-player" onClick={() => setTab('player')}>
+          {current.artwork ? <img src={current.artwork} alt="" className="mini-art" /> : <div className="mini-art mini-fallback" style={{ background: current.feedColor }}>{current.feedShort}</div>}
+          <div className="mini-info"><div className="mini-title">{current.title}</div><div className="mini-meta">{current.type === 'podcast' ? current.feedName : current.artist}</div></div>
           <button className="mini-play" onClick={(e) => { e.stopPropagation(); togglePlay() }}>{playing ? '❚❚' : '▶'}</button>
         </div>
       )}
 
-      {/* === LIBRARY (Spotify-style home) === */}
-      {tab === 'library' && (
-        <div className="tab-content">
-          <header className="home-header">
-            <h1>{getGreeting()}</h1>
-            <div className="header-actions">
-              <button className={`rain-toggle ${rainPlaying ? 'active' : ''}`} onClick={() => setShowSleep(!showSleep)}>🌧</button>
-            </div>
-          </header>
-
-          {/* Sleep / Rain panel */}
-          {showSleep && (
-            <div className="sleep-panel">
-              <div className="sleep-row">
-                <span className="sleep-label">Rain Sounds</span>
-                <button className={`rain-btn ${rainPlaying ? 'active' : ''}`} onClick={toggleRain}>{rainPlaying ? 'Stop' : 'Play'}</button>
-              </div>
-              <div className="sleep-row">
-                <span className="sleep-label">Volume</span>
-                <input type="range" min="0" max="1" step="0.05" value={rainVolume} onChange={(e) => updateRainVolume(+e.target.value)} className="vol-slider" />
-              </div>
-              <div className="sleep-row">
-                <span className="sleep-label">Sleep Timer</span>
-                <div className="timer-pills">
-                  {[0, 15, 30, 45, 60, 90].map((m) => (
-                    <button key={m} className={`timer-pill ${sleepTimer === m ? 'active' : ''}`} onClick={() => { setSleepTimer(m); if (rainPlaying && m > 0) startSleepTimer(m); if (m === 0) { setSleepRemaining(0); clearInterval(sleepIntervalRef.current) } }}>
-                      {m === 0 ? '∞' : `${m}m`}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {sleepRemaining > 0 && <div className="sleep-remaining">Stopping in {Math.floor(sleepRemaining/60)}:{(sleepRemaining%60).toString().padStart(2,'0')}</div>}
-            </div>
-          )}
-
-          {/* Commute Mix */}
-          {commuteMix.mix.length > 0 && (
-            <div className="commute-card" onClick={playCommuteMix}>
-              <div className="commute-left">
-                <div className="commute-icon">🚗</div>
-                <div className="commute-info">
-                  <div className="commute-title">Morning Commute</div>
-                  <div className="commute-meta">{commuteMix.mix.length} episodes · ~{commuteMix.totalMin} min</div>
-                  <div className="commute-feeds">{[...new Set(commuteMix.mix.map((e) => e.feedName))].join(' · ')}</div>
-                </div>
-              </div>
-              <span className="commute-play">▶</span>
-            </div>
-          )}
-
-          {/* Category pills */}
-          <div className="cat-pills">
-            {CATEGORIES.filter((c) => c === 'All' || feeds.some((f) => f.category === c)).map((c) => (
-              <button key={c} className={`pill ${categoryFilter === c ? 'active' : ''}`} onClick={() => setCategoryFilter(c)}>{c}</button>
-            ))}
-          </div>
-
-          {loading && !episodes.length && <div className="status">Loading episodes...</div>}
-          {error && <div className="status error">{error}</div>}
-
-          {/* Podcast grid (Spotify-style) */}
-          <div className="podcast-grid">
-            {feeds.filter((f) => categoryFilter === 'All' || f.category === categoryFilter).map((f) => {
-              const meta = allEpisodesByFeed[f.name]
-              const latestEp = meta?.episodes?.[0]
-              const hasNew = latestEp && (Date.now() - latestEp.pubDate.getTime()) < 36 * 3600 * 1000
-              return (
-                <div key={f.rssUrl} className="podcast-card" onClick={() => openFeedDetail(f.name)}>
-                  {(meta?.channelImg || f.artwork) ? <img src={meta?.channelImg || f.artwork} alt="" className="card-art" /> : <div className="card-art card-fallback" style={{ background: f.color }}>{f.short}</div>}
-                  <div className="card-info">
-                    <div className="card-name">{f.name}</div>
-                    {hasNew && <span className="card-dot" />}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Latest episodes */}
-          {filteredEpisodes.length > 0 && (
-            <section style={{ marginTop: 20 }}>
-              <h2 className="section-title">Latest Episodes</h2>
-              {filteredEpisodes.slice(0, 6).map((ep) => {
-                const idx = episodes.indexOf(ep)
-                const isNew = (Date.now() - ep.pubDate.getTime()) < 36 * 3600 * 1000
-                return (
-                  <div key={ep.id} className="ep-card" onClick={() => idx >= 0 ? playEpisode(idx) : playEpisodeDirect(ep)}>
-                    {ep.artwork && <img src={ep.artwork} alt="" className="ep-card-art" />}
-                    <div className="ep-card-info">
-                      <div className="ep-card-feed">{ep.feedName} {isNew && <span className="new-badge">NEW</span>}</div>
-                      <div className="ep-card-title">{ep.title}</div>
-                      <div className="ep-card-meta">{formatDate(ep.pubDate)} · {Math.round(ep.durationSec / 60)} min</div>
-                      {ep.desc && <div className="ep-card-desc">{ep.desc}</div>}
-                    </div>
-                  </div>
-                )
-              })}
-            </section>
-          )}
-
-          {/* Recommendations */}
-          {recsToShow.length > 0 && (
-            <section style={{ marginTop: 24 }}>
-              <h2 className="section-title">Recommended</h2>
-              <div className="rec-scroll">
-                {recsToShow.map((r) => (
-                  <div key={r.id} className="rec-card" onClick={() => addRecommended(r)}>
-                    <div className="rec-icon">+</div>
-                    <div className="rec-name">{r.name}</div>
-                    <div className="rec-genre">{r.genre}</div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-        </div>
-      )}
-
-      {/* === PODCAST DETAIL === */}
-      {tab === 'detail' && detailFeed && (
-        <div className="tab-content">
-          <button className="back-btn" onClick={() => setTab('library')}>← Library</button>
-          <div className="detail-header">
-            {detailMeta?.img ? <img src={detailMeta.img} alt="" className="detail-art" /> : <div className="detail-art detail-fallback" style={{ background: detailFeed.color }}>{detailFeed.short}</div>}
-            <div className="detail-info"><h2 className="detail-name">{detailFeed.name}</h2><div className="feed-cat">{detailFeed.category}</div><div className="detail-count">{detailMeta?.count || detailEpisodes.length} episodes</div></div>
-          </div>
-          {detailMeta?.desc && <p className="detail-desc">{stripHtml(detailMeta.desc).slice(0, 200)}</p>}
-          <button className="remove-feed-btn" onClick={() => { removeFeed(feeds.indexOf(detailFeed)); setTab('library') }}>Remove from Library</button>
-          {detailLoading && <div className="status">Loading episodes...</div>}
-          <p className="section-label" style={{ marginTop: 16 }}>ALL EPISODES</p>
-          {detailEpisodes.map((ep) => (
-            <div key={ep.id} className="ep-row" onClick={() => playEpisodeDirect(ep)}>
-              <div className="ep-info">
-                <div className="ep-title">{ep.title}{(Date.now() - ep.pubDate.getTime()) < 36*3600*1000 && <span className="new-badge">NEW</span>}</div>
-                <div className="ep-meta">{formatDate(ep.pubDate)} · {Math.round(ep.durationSec/60)} min</div>
-                {ep.desc && <div className="ep-desc">{ep.desc}</div>}
-              </div>
-              <button className="ep-play" onClick={(e) => { e.stopPropagation(); playEpisodeDirect(ep) }}>▶</button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* === SEARCH PREVIEW === */}
-      {tab === 'preview' && previewPodcast && (
-        <div className="tab-content">
-          <button className="back-btn" onClick={() => setTab('search')}>← Search</button>
-          <div className="detail-header">
-            {previewPodcast.artworkUrl100 && <img src={previewPodcast.artworkUrl100} alt="" className="detail-art" />}
-            <div className="detail-info"><h2 className="detail-name">{previewPodcast.collectionName}</h2><div className="detail-artist">{previewPodcast.artistName}</div><div className="feed-cat">{previewPodcast.primaryGenreName}</div><div className="detail-count">{previewPodcast.trackCount} episodes</div></div>
-          </div>
-          {!feeds.some((f) => f.rssUrl === previewPodcast.feedUrl) ? <button className="add-feed-btn" onClick={() => addFromSearch(previewPodcast)}>+ Add to Library</button> : <div className="added-feed-label">Already in Library</div>}
-          {previewLoading && <div className="status">Loading episodes...</div>}
-          {previewEpisodes.length > 0 && (<><p className="section-label" style={{ marginTop: 16 }}>EPISODES</p>{previewEpisodes.map((ep) => (<div key={ep.id} className="ep-row" onClick={() => playEpisodeDirect(ep)}><div className="ep-info"><div className="ep-title">{ep.title}</div><div className="ep-meta">{formatDate(ep.pubDate)} · {Math.round(ep.durationSec/60)} min</div>{ep.desc && <div className="ep-desc">{ep.desc}</div>}</div><button className="ep-play" onClick={(e) => { e.stopPropagation(); playEpisodeDirect(ep) }}>▶</button></div>))}</>)}
-        </div>
-      )}
-
-      {/* === NOW PLAYING === */}
-      {tab === 'playing' && (
-        <div className="tab-content playing-tab">
-          {current ? (<>
-            <div className="art-large-wrap">{current.artwork ? <img src={current.artwork} alt="" className="art-large" /> : <div className="art-large art-fallback" style={{ background: current.feedColor }}>{current.feedShort}</div>}</div>
-            <div className="playing-info"><div className="playing-title">{current.title}</div><div className="playing-meta">{current.feedName} · {formatDate(current.pubDate)}</div>{current.desc && <div className="playing-desc">{current.desc}</div>}</div>
-            <div className="progress-bar" ref={progressRef} onClick={(e) => seekFromEvent(e.clientX)} onTouchStart={(e) => seekFromEvent(e.touches[0].clientX)} onTouchMove={(e) => seekFromEvent(e.touches[0].clientX)}><div className="progress-fill" style={{ width: `${pct}%` }} /></div>
-            <div className="time-row"><span>{formatTime(currentTime)}</span><span>{formatTime(duration)}</span></div>
-            <div className="controls"><button className="ctrl-btn" onClick={() => skip(-15)}>-15s</button><button className="play-btn" onClick={togglePlay}>{playing ? '❚❚' : '▶'}</button><button className="ctrl-btn" onClick={() => skip(30)}>+30s</button></div>
-            {upNext.length > 0 && (<section className="queue"><p className="section-label">UP NEXT</p>{upNext.map((ep) => { const idx = episodes.indexOf(ep); return (<div key={ep.id} className="ep-row" onClick={() => playEpisode(idx)}>{ep.artwork && <img src={ep.artwork} alt="" className="queue-art" />}{!ep.artwork && <div className="queue-badge" style={{ background: ep.feedColor }}>{ep.feedShort}</div>}<div className="ep-info"><div className="ep-title">{ep.title}</div><div className="ep-meta">{ep.feedName} · {Math.round(ep.durationSec/60)} min</div></div></div>) })}</section>)}
-          </>) : (<div className="empty-state"><div className="empty-icon">🎧</div><div className="empty-title">Nothing playing</div><div className="empty-sub">Browse your library or search to start listening</div></div>)}
-        </div>
-      )}
-
-      {/* === SEARCH === */}
-      {tab === 'search' && (
-        <div className="tab-content">
-          <header><h1>Search</h1></header>
-          <div className="search-box">
-            <input type="text" placeholder="Search podcasts..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && searchPodcasts()} className="search-input" />
-            <button className="search-btn" onClick={() => searchPodcasts()}>Search</button>
-          </div>
-
-          {!searchResults.length && searchHistory.length > 0 && (
-            <section style={{ marginTop: 20 }}>
-              <p className="section-label">RECENT SEARCHES</p>
-              {searchHistory.map((h, i) => (
-                <div key={i} className="history-row" onClick={() => { setSearchQuery(h); searchPodcasts(h) }}>
-                  <span className="history-icon">↻</span> {h}
-                </div>
-              ))}
-            </section>
-          )}
-
-          {searchResults.length > 0 && (
-            <section style={{ marginTop: 20 }}>
-              <p className="section-label">RESULTS</p>
-              {searchResults.map((r) => {
-                const added = feeds.some((f) => f.rssUrl === r.feedUrl)
-                return (
-                  <div key={r.collectionId} className="search-result" onClick={() => openPreview(r)}>
-                    {r.artworkUrl100 && <img src={r.artworkUrl100} alt="" className="search-art" />}
-                    <div className="ep-info"><div className="ep-title">{r.collectionName}</div><div className="ep-meta">{r.artistName}</div><div className="search-detail">{r.primaryGenreName} · {r.trackCount} eps</div></div>
-                    {added ? <span className="added-label">Added</span> : <button className="add-btn" onClick={(e) => { e.stopPropagation(); addFromSearch(r) }}>+ Add</button>}
-                  </div>
-                )
-              })}
-            </section>
-          )}
-        </div>
-      )}
-
+      {/* ═══ TAB BAR ═══ */}
       <nav className="tab-bar">
-        <button className={`tab ${tab === 'library' || tab === 'detail' ? 'active' : ''}`} onClick={() => setTab('library')}><span className="tab-icon">☰</span>Library</button>
-        <button className={`tab ${tab === 'playing' ? 'active' : ''}`} onClick={() => setTab('playing')}><span className="tab-icon">▶</span>Now Playing</button>
-        <button className={`tab ${tab === 'search' || tab === 'preview' ? 'active' : ''}`} onClick={() => setTab('search')}><span className="tab-icon">⌕</span>Search</button>
+        <button className={`tab ${tab === 'player' ? 'active' : ''}`} onClick={() => setTab('player')}><span className="tab-icon">▶</span>Player</button>
+        <button className={`tab ${tab === 'queue' ? 'active' : ''}`} onClick={() => setTab('queue')}><span className="tab-icon">☰</span>Queue</button>
+        <button className={`tab ${tab === 'study' ? 'active' : ''}`} onClick={() => setTab('study')}><span className="tab-icon">📖</span>Study</button>
+        <button className={`tab ${tab === 'settings' ? 'active' : ''}`} onClick={() => setTab('settings')}><span className="tab-icon">⚙</span>Settings</button>
       </nav>
+    </div>
+  )
+}
+
+// ── Add Feed Form ──
+function AddFeedForm({ onAdd }) {
+  const [name, setName] = useState('')
+  const [url, setUrl] = useState('')
+  const [cat, setCat] = useState('Other')
+  const [open, setOpen] = useState(false)
+
+  if (!open) return <button className="add-feed-toggle" onClick={() => setOpen(true)}>+ Add Feed</button>
+
+  return (
+    <div className="add-feed-form">
+      <input placeholder="Podcast name" value={name} onChange={(e) => setName(e.target.value)} className="input" />
+      <input placeholder="RSS URL" value={url} onChange={(e) => setUrl(e.target.value)} className="input" />
+      <select value={cat} onChange={(e) => setCat(e.target.value)} className="select">
+        <option>News</option><option>Story</option><option>Documentary</option><option>Other</option>
+      </select>
+      <div className="add-feed-actions">
+        <button className="btn-secondary" onClick={() => setOpen(false)}>Cancel</button>
+        <button className="btn-primary" onClick={() => { if (name && url) { onAdd(name, url, cat); setName(''); setUrl(''); setOpen(false) } }}>Add</button>
+      </div>
     </div>
   )
 }

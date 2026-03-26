@@ -19,8 +19,26 @@ function feedProxyPlugin() {
   }
 }
 
+function spotifyProxyPlugin() {
+  return {
+    name: 'spotify-proxy',
+    configureServer(server) {
+      server.middlewares.use('/.netlify/functions/spotify', async (req, res) => {
+        const action = new URL(req.url, 'http://localhost').searchParams.get('action')
+        res.setHeader('Content-Type', 'application/json')
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        if (req.method === 'OPTIONS') { res.writeHead(200); res.end(''); return }
+        // In dev, forward to the real Netlify function or return mock data
+        // For now, return a message telling the user to set up Netlify dev
+        res.writeHead(200)
+        res.end(JSON.stringify({ error: 'Use netlify dev for Spotify functions locally', tracks: [] }))
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), feedProxyPlugin()],
+  plugins: [react(), feedProxyPlugin(), spotifyProxyPlugin()],
   server: {
     proxy: {
       '/feed/simplecast': {
