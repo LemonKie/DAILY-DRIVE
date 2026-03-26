@@ -564,6 +564,152 @@ h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
 }
 .remove-feed-btn:active { background: #e55; color: white; }
 
+/* === STUDY TAB === */
+.study-xp-badge {
+  padding: 4px 12px; border-radius: 20px;
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  color: white; font-size: 12px; font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.study-card {
+  background: var(--surface); border-radius: 14px;
+  padding: 16px; margin-bottom: 12px;
+  border: 1px solid var(--border);
+  transition: transform 0.15s;
+}
+.study-card:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(124, 58, 237, 0.1); }
+
+.study-card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.study-card-title {
+  font-size: 15px; font-weight: 700; color: var(--text);
+  display: block; margin-bottom: 4px;
+}
+
+.streak-count {
+  font-size: 14px; font-weight: 700;
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.streak-dots {
+  display: flex; justify-content: space-between; gap: 8px;
+  margin-bottom: 14px;
+}
+.streak-dot-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.streak-dot {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: var(--surface2); border: 2px solid var(--border);
+  transition: all 0.2s;
+}
+.streak-dot.filled {
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  border-color: #a855f7;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.4);
+}
+.streak-dot.today { border-color: #a855f7; }
+.streak-day-label {
+  font-size: 10px; font-weight: 600; color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+
+.study-checkin-btn {
+  width: 100%; padding: 12px; border-radius: 10px; border: none;
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  color: white; font-size: 14px; font-weight: 700;
+  cursor: pointer; transition: all 0.2s;
+  letter-spacing: 0.3px;
+}
+.study-checkin-btn:active { transform: scale(0.97); }
+.study-checkin-btn.done {
+  background: var(--surface2); color: #a855f7;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  cursor: default;
+}
+
+/* XP bar */
+.xp-label { font-size: 13px; font-weight: 600; color: #a855f7; }
+.xp-bar {
+  height: 8px; background: var(--surface2); border-radius: 4px;
+  overflow: hidden;
+}
+.xp-fill {
+  height: 100%; border-radius: 4px;
+  background: linear-gradient(90deg, #7c3aed, #a855f7, #c084fc);
+  transition: width 0.4s ease;
+}
+
+/* Exam countdown */
+.exam-days {
+  font-size: 14px; font-weight: 700; color: #a855f7;
+}
+.exam-date {
+  font-size: 12px; color: var(--text-dim); margin-bottom: 10px;
+}
+.exam-bar {
+  height: 8px; background: var(--surface2); border-radius: 4px;
+  overflow: hidden;
+}
+.exam-fill {
+  height: 100%; border-radius: 4px;
+  background: linear-gradient(90deg, #7c3aed, #a855f7, #f472b6);
+  transition: width 0.4s ease;
+}
+
+/* Domain progress */
+.domain-list { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.domain-row {
+  cursor: pointer; padding: 10px 12px;
+  background: var(--surface2); border-radius: 10px;
+  transition: all 0.2s;
+}
+.domain-row:hover { background: #2a2a2a; }
+.domain-row:active { transform: scale(0.98); }
+.domain-info {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 6px;
+}
+.domain-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.domain-pct { font-size: 13px; font-weight: 700; color: #a855f7; }
+.domain-bar {
+  height: 6px; background: var(--border); border-radius: 3px;
+  overflow: hidden;
+}
+.domain-fill {
+  height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, #7c3aed, #a855f7);
+  transition: width 0.3s ease;
+}
+.domain-hint {
+  font-size: 11px; color: var(--text-dim); text-align: center;
+  margin-top: 10px; font-style: italic;
+}
+
+/* Quick links */
+.study-links {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  margin-top: 8px;
+}
+.study-link {
+  display: flex; align-items: center; justify-content: center;
+  padding: 12px 8px; border-radius: 10px;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: #a855f7; font-size: 13px; font-weight: 600;
+  text-decoration: none; transition: all 0.2s;
+}
+.study-link:hover {
+  background: rgba(124, 58, 237, 0.15);
+  border-color: rgba(168, 85, 247, 0.4);
+  transform: translateY(-1px);
+}
+.study-link:active { transform: scale(0.96); }
+
 /* Wider tap targets for iPhone */
 @media (min-width: 390px) {
   .ep-play { width: 36px; height: 36px; font-size: 14px; }
