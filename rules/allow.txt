@@ -1,0 +1,27 @@
+# allow.txt — hosts to pass through unconditionally (logged as ALLOWED)
+#
+# Syntax:
+#   hostname     exact match
+#   *.hostname   all subdomains
+#
+# Use this for hosts you've confirmed are legitimate app infrastructure.
+# Adding a host here removes it from the UNMATCHED list so you can focus
+# on things you haven't categorized yet.
+#
+# content.overwolf.com and www.overwolf.com are intentionally NOT here —
+# URL-path blocking handles them. Non-/monsdk/ paths fall through as UNMATCHED.
+
+# ── iTero / Align Technology core services ────────────────────────────────────
+# Uncomment after confirming these hosts in your logs.
+#
+# itero.align.com
+# *.itero.com
+# aligntech.com
+# *.aligntech.com
+
+# ── Windows / Microsoft infrastructure (noisy, rarely interesting) ────────────
+# Uncomment to suppress from UNMATCHED if log volume is too high.
+#
+# *.microsoft.com
+# *.windows.com
+# *.windowsupdate.com

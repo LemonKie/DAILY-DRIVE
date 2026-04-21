@@ -1,0 +1,21 @@
+# block.txt — patterns that return HTTP 403
+#
+# Syntax:
+#   hostname               block all paths on this host
+#   hostname/path/prefix   block only paths starting with /path/prefix
+#   *.hostname             block all subdomains
+#
+# content.overwolf.com and www.overwolf.com are intentionally NOT listed here
+# as host-only rules. Only the /monsdk/ path prefix is blocked so that
+# non-monetization resources (CDN assets, etc.) still load normally.
+
+# ── Overwolf monetization SDK ─────────────────────────────────────────────────
+content.overwolf.com/monsdk/
+www.overwolf.com/monsdk/
+
+# ── Overwolf analytics / ads (full host blocks — add as discovered) ───────────
+# Uncomment or extend after reviewing UNMATCHED logs from a session.
+#
+# analytics.overwolf.com
+# ads.overwolf.com
+# telemetry.overwolf.com

@@ -1,114 +1,183 @@
-# Daily Drive
+# Daily Drive Proxy
 
-A Progressive Web App that replaces Spotify's discontinued Daily Drive feature. It pulls fresh podcast episodes from RSS feeds, builds a morning commute playlist, and lives on your iPhone home screen.
+A local HTTPS proxy for analyzing and filtering network traffic from specific Windows
+applications. Built for personal use to understand what a third-party app is sending
+over the network.
+
+**This is a traffic analysis tool for learning purposes — not a distribution tool.**
+
+---
 
 ## What It Does
 
-- **Morning Commute Mix** — One-tap playlist that auto-generates a ~30 min queue from your podcasts, prioritizing news then mixing in other categories. Like Spotify's Daily Drive daylist.
-- **Podcast Library** — Spotify-style home with a 2-column grid of your subscribed podcasts, latest episode cards, and curated recommendations.
-- **Full Episode Browsing** — Tap any podcast to see all episodes (up to 100). Browse old episodes, not just the latest.
-- **Search & Discovery** — Search Apple Podcasts, preview any show's episodes before subscribing, search history saved locally.
-- **Audio Player** — Full playback controls, touch-friendly seek bar, skip forward/back, lock screen controls via Media Session API.
-- **Rain Sounds & Sleep Timer** — Pink noise generator using Web Audio API. Continuous play or timed (15/30/45/60/90 min) with volume fade-out in the last 30 seconds.
-- **Auto-Refresh** — Episodes refresh automatically at 6am Chicago time every day.
-- **Playback Persistence** — Remembers your position in every episode and which episode you were on across app restarts.
+Runs [mitmproxy](https://mitmproxy.org/) as a local proxy on `127.0.0.1:8080`,
+intercepts HTTPS traffic, and applies two plain-text rule files:
 
-## Tech Stack
+| File | Purpose |
+|---|---|
+| `rules/block.txt` | Patterns to BLOCK — returns HTTP 403 to the app |
+| `rules/allow.txt` | Hosts to explicitly trust — logged as ALLOWED, never blocked |
 
-| Layer | Tech |
-|-------|------|
-| Frontend | React 18 + Vite |
-| Styling | Custom CSS (dark theme, CSS variables) |
-| RSS Parsing | DOMParser (XML to episodes) |
-| Podcast Search | Apple iTunes Search API (free, no CORS) |
-| Audio | HTML5 `<audio>` + Web Audio API (rain noise) |
-| Lock Screen | Media Session API |
-| Persistence | localStorage (feeds, episodes, positions, search history) |
-| Dev Proxy | Vite middleware plugin + static proxy paths |
-| Prod Proxy | Netlify serverless function |
-| Hosting | Netlify (static + functions) |
-| PWA | manifest.json, apple-mobile-web-app meta tags |
+Everything else passes through and is logged as **UNMATCHED** — the list to review after
+a session when deciding what to add to each rule file.
 
-## Project Structure
+Each request is written to `logs/YYYY-MM-DD.log`:
 
 ```
-DD/
-├── index.html              # PWA entry point (viewport-fit, Dynamic Island support)
-├── manifest.json           # PWA manifest (standalone, dark theme)
-├── netlify.toml            # Netlify build config
-├── package.json            # React 18, Vite 5
-├── vite.config.js          # Dev proxy + feed middleware plugin
-├── netlify/
-│   └── functions/
-│       └── feed.js         # Serverless RSS proxy for production
-└── src/
-    ├── main.jsx            # React entry
-    ├── App.jsx             # All app logic (~600 lines, single component)
-    └── style.css           # All styles (~500 lines, CSS variables)
+2026-04-21 08:30:15 | BLOCKED   | content.overwolf.com | /monsdk/loader.js
+2026-04-21 08:30:16 | ALLOWED   | itero.align.com | /app/api/scan
+2026-04-21 08:30:17 | UNMATCHED | fonts.googleapis.com | /css2?family=Inter
 ```
 
-## Key Features Explained
+After a session, `tools\share-log.ps1` strips private domains (Spotify, Discord, etc.)
+and produces a clean summary file ready to paste into an AI chat or review manually.
 
-### RSS Proxy (CORS)
+---
 
-Browsers block direct RSS feed fetches due to CORS. We solve this two ways:
+## Install
 
-- **Dev**: Vite dev server has a middleware plugin (`feedProxyPlugin`) that intercepts `/.netlify/functions/feed?url=...` requests and fetches RSS directly. Also has static proxy paths for known feeds (Simplecast, NPR).
-- **Prod**: A Netlify serverless function at `netlify/functions/feed.js` does the same — takes a `?url=` param, fetches the RSS, and returns it with CORS headers.
+> **Requires admin — run once.** The installer adds the mitmproxy CA certificate to the
+> Windows Trusted Root store so HTTPS can be decrypted and inspected.
 
-### Morning Commute Mix
+1. Install **Python 3.10+** from [python.org](https://python.org) — check "Add to PATH"
+2. Open an **Administrator** PowerShell window in this folder
+3. Run:
 
-The `buildCommuteMix()` function creates a ~30 min playlist:
-
-1. Grabs the latest episode from each news feed
-2. Fills remaining time with episodes from other categories, alternating between feeds
-3. Accounts for saved playback positions (remaining time, not full duration)
-4. As you add more podcasts, the mix gets closer to the 30 min target
-
-### Rain / White Noise
-
-Uses the Web Audio API to generate pink noise (sounds like rain):
-- Creates an AudioBuffer with the Voss-McCartney pink noise algorithm
-- Loops the buffer continuously
-- GainNode controls volume
-- Sleep timer counts down and fades volume to zero in the last 30 seconds, then stops both rain and podcast audio
-
-### iPhone PWA Support
-
-- `viewport-fit=cover` + `env(safe-area-inset-top/bottom)` for Dynamic Island and home indicator
-- `apple-mobile-web-app-capable` for standalone mode
-- `apple-mobile-web-app-status-bar-style: black-translucent` for immersive header
-- Touch seek on progress bar via `onTouchStart`/`onTouchMove`
-
-### Persistence
-
-All state is saved to localStorage:
-
-| Key | What |
-|-----|------|
-| `dd-feeds` | Subscribed podcast feeds (name, RSS URL, category, color, artwork) |
-| `dd-episodes` | Cached recent episodes (loads instantly on app open) |
-| `dd-playback` | Current episode ID + timestamp |
-| `dd-positions` | Per-episode playback positions (resume where you left off) |
-| `dd-search-history` | Last 10 search queries |
-
-## Running Locally
-
-```bash
-npm install
-npm run dev
+```powershell
+.\install.ps1
 ```
 
-## Deploying
+The script will:
+- Install `mitmproxy` via pip
+- Run mitmdump briefly to generate the CA certificate
+- Import that certificate into `Cert:\LocalMachine\Root`
+- Create the `logs\` directory
 
-Connect the GitHub repo to Netlify. It will:
-1. Run `npm run build`
-2. Publish the `dist/` folder
-3. Deploy `netlify/functions/feed.js` as a serverless function
+You only need to do this once per machine (or after mitmproxy updates that rotate the CA).
 
-## Default Feeds
+---
 
-- The Daily (NYT)
-- Up First (NPR)
+## Daily Use
 
-You can add any podcast via the Search tab (uses Apple Podcasts search).
+### Before launching the app you want to analyze
+
+```
+start-blocker.bat
+```
+
+This enables the Windows system proxy (`127.0.0.1:8080`) and starts mitmproxy with the
+blocker addon. All HTTP/HTTPS traffic from the system is now intercepted and logged.
+
+### When done
+
+Press `Ctrl+C` in the blocker window. The system proxy is restored automatically.
+
+If the window was closed unexpectedly (crash, force-close), run:
+
+```
+stop-blocker.bat
+```
+
+This kills any leftover `mitmdump.exe` process and disables the proxy.
+
+---
+
+## Iterating on Rules
+
+The workflow after a session:
+
+1. Run `tools\share-log.ps1` in PowerShell
+2. Open `logs\shareable-YYYY-MM-DD.txt`
+3. Review **UNMATCHED** — anything suspicious or noisy? Add it to `rules\block.txt` or
+   `rules\allow.txt`
+4. Review **BLOCKED** — anything that shouldn't have been blocked? Add it to
+   `rules\allow.txt`, or narrow the block rule to a more specific path
+5. Restart the blocker and repeat
+
+Or paste the shareable file into Claude (or another AI assistant) and ask for help
+interpreting what you're seeing.
+
+### Rule format
+
+**`rules/block.txt`** — one rule per line, `#` comments, blank lines ignored:
+
+```
+# Block all paths on this host
+analytics.example.com
+
+# Block only URLs whose path starts with /monsdk/
+content.example.com/monsdk/
+
+# Wildcard: block all subdomains
+*.tracking.example.com
+```
+
+**`rules/allow.txt`** — same format, host patterns only (no path component):
+
+```
+# Exact host
+itero.align.com
+
+# All subdomains
+*.itero.com
+```
+
+> `content.overwolf.com` and `www.overwolf.com` are intentionally **not** in
+> `allow.txt`. URL-path blocking handles them: `/monsdk/` paths are blocked, everything
+> else falls through as UNMATCHED.
+
+---
+
+## Troubleshooting
+
+### Cert install fails
+
+- `install.ps1` **must** be run as Administrator
+- To verify the cert is installed: open `certmgr.msc` →
+  *Trusted Root Certification Authorities* → *Certificates* → look for **mitmproxy**
+- To reinstall: delete the mitmproxy entry in certmgr, then re-run `install.ps1`
+- If the mitmdump cert-generation step hangs, kill it manually and check whether
+  `%USERPROFILE%\.mitmproxy\mitmproxy-ca-cert.cer` exists — if so, re-run the script
+
+### Proxy stuck on after crash
+
+If the blocker window closes unexpectedly, the system proxy stays on and all traffic
+fails (nothing is listening on 8080).
+
+**Fix:** run `stop-blocker.bat` — it kills `mitmdump.exe` and disables the proxy.
+
+**Manual fix:** Settings → Network & Internet → Proxy → toggle **Use a proxy server** off.
+
+Or from an admin prompt:
+```
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" /v ProxyEnable /t REG_DWORD /d 0 /f
+```
+
+### App shows "ad blocker detected"
+
+The app detected a 403 where it expected a normal response. Either:
+
+- The block rule is **too broad** — narrow it to a specific path prefix
+- The blocked host is actually required for the app to function — add it to
+  `rules\allow.txt`
+
+Check today's log or the BLOCKED section of the shareable output to see what was hit.
+
+### App won't connect at all
+
+1. Confirm `start-blocker.bat` is running and shows no errors
+2. Confirm the CA cert is in the Trusted Root store (see above)
+3. Check for port conflicts: `netstat -an | findstr 8080`
+4. Some apps pin their own certificates (HSTS / cert pinning) and will never trust a
+   proxy CA — there is no workaround for those
+
+---
+
+## Notes
+
+- Modifies **Windows system proxy** (HKCU registry) while running. No other system
+  changes are made during normal use.
+- `install.ps1` requires admin once for the cert import. `start-blocker.bat` and
+  `stop-blocker.bat` do not need admin.
+- Log files can grow large during long sessions — they are gitignored.
+- The `%USERPROFILE%\.mitmproxy\` folder (CA private key) is never committed.

@@ -1,4 +1,11 @@
-node_modules
-dist
-.DS_Store
-.vite
+# mitmproxy CA keys — never commit
+.mitmproxy/
+
+# Session logs — can be large; use tools/share-log.ps1 to make a shareable excerpt
+logs/*.log
+logs/shareable-*.txt
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
