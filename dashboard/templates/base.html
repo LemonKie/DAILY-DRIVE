@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}iTero Blocker{% endblock %} — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+  <nav class="nav">
+    <div class="nav-brand">
+      <span class="status-dot dot-gray" id="nav-dot" title="Checking blocker status…"></span>
+      <span class="nav-title">iTero Blocker</span>
+    </div>
+    <div class="nav-links">
+      <a href="/" class="nav-link{% if page == 'live' %} active{% endif %}">Live</a>
+      <a href="/history" class="nav-link{% if page == 'history' %} active{% endif %}">History</a>
+      <a href="/report" class="nav-link{% if page == 'report' %} active{% endif %}">Report</a>
+    </div>
+  </nav>
+
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <div id="toast-container" aria-live="polite" aria-atomic="false"></div>
+
+  <script src="{{ url_for('static', filename='js/rules-editor.js') }}"></script>
+  {% block scripts %}{% endblock %}
+
+</body>
+</html>

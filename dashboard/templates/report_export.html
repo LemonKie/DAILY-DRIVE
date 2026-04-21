@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>iTero Blocker — Traffic Analysis Report {{ report_date }}</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0a0a0f; --surface: #15151c; --border: #26262e;
+      --text: #e8e8ea; --secondary: #8b8b94;
+      --green: #22c55e; --blue: #3b82f6; --amber: #eab308;
+      --violet: #7c5cff; --red: #ef4444;
+      --mono: 'JetBrains Mono', ui-monospace, monospace;
+      --ui: 'Inter', system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: var(--ui); font-size: 14px; line-height: 1.5; }
+    .mono { font-family: var(--mono); }
+    .secondary { color: var(--secondary); }
+    /* Layout */
+    .page { max-width: 1200px; margin: 0 auto; padding: 40px 24px; }
+    /* Header */
+    .report-header { margin-bottom: 40px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
+    .report-header h1 { font-size: 28px; font-weight: 600; margin-bottom: 8px; }
+    .report-meta { color: var(--secondary); font-size: 13px; display: flex; gap: 24px; flex-wrap: wrap; margin-bottom: 12px; }
+    .report-methodology { font-size: 12px; color: var(--secondary); border-left: 2px solid var(--border); padding-left: 12px; }
+    /* Stat cards */
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
+    .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--secondary); margin-bottom: 8px; }
+    .stat-value { font-family: var(--mono); font-size: 36px; font-weight: 500; line-height: 1; }
+    .stat-blocked .stat-value  { color: var(--green);  }
+    .stat-allowed .stat-value  { color: var(--blue);   }
+    .stat-unmatched .stat-value{ color: var(--amber);  }
+    .stat-rate .stat-value     { color: var(--violet); }
+    /* Cards */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 24px; margin-bottom: 16px; }
+    .card-header { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--secondary); margin-bottom: 16px; }
+    .chart-wrap { position: relative; height: 240px; }
+    .chart-wrap-sm { position: relative; height: 80px; }
+    /* Tables */
+    .tables-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 16px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--secondary); padding: 6px 8px; border-bottom: 1px solid var(--border); }
+    td { padding: 6px 8px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+    .col-num { text-align: right; }
+    .col-time { color: var(--secondary); }
+    .label-blocked  { color: var(--green);  }
+    .label-allowed  { color: var(--blue);   }
+    .label-unmatched{ color: var(--amber);  }
+    @media (max-width: 900px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .tables-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <header class="report-header">
+    <h1>iTero Blocker — Traffic Analysis Report</h1>
+    <div class="report-meta">
+      <span>Date: <strong>{{ report_date }}</strong></span>
+      <span>Generated: <strong>{{ generated_at }}</strong></span>
+    </div>
+    <p class="report-methodology">
+      Traffic captured via local HTTPS proxy (mitmproxy 10.x). Each request is classified as
+      BLOCKED (matched a block rule), ALLOWED (matched an allow rule), or UNMATCHED (no rule —
+      passed through). Privacy domains (Spotify, Discord, Claude, Google accounts) have been
+      stripped from this report.
+    </p>
+  </header>
+
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card stat-blocked">
+      <div class="stat-label">Blocked</div>
+      <div class="stat-value" id="r-blocked">—</div>
+    </div>
+    <div class="stat-card stat-allowed">
+      <div class="stat-label">Allowed</div>
+      <div class="stat-value" id="r-allowed">—</div>
+    </div>
+    <div class="stat-card stat-unmatched">
+      <div class="stat-label">Unmatched</div>
+      <div class="stat-value" id="r-unmatched">—</div>
+    </div>
+    <div class="stat-card stat-rate">
+      <div class="stat-label">Block Rate</div>
+      <div class="stat-value" id="r-rate">—</div>
+    </div>
+  </div>
+
+  <!-- Effectiveness -->
+  <div class="card">
+    <div class="card-header">Block effectiveness — last hour of session</div>
+    <div class="chart-wrap-sm"><canvas id="r-effectiveness"></canvas></div>
+  </div>
+
+  <!-- Timeline -->
+  <div class="card">
+    <div class="card-header">Full-day traffic timeline</div>
+    <div class="chart-wrap"><canvas id="r-timeline"></canvas></div>
+  </div>
+
+  <!-- Tables -->
+  <div class="tables-grid">
+    <div class="card">
+      <div class="card-header label-blocked">Top Blocked</div>
+      <table id="r-table-blocked">
+        <thead><tr><th>Domain</th><th class="col-num">Count</th><th class="col-num">%</th><th>Last seen</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-header label-allowed">Top Allowed</div>
+      <table id="r-table-allowed">
+        <thead><tr><th>Domain</th><th class="col-num">Count</th><th class="col-num">%</th><th>Last seen</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-header label-unmatched">Top Unmatched</div>
+      <table id="r-table-unmatched">
+        <thead><tr><th>Domain</th><th class="col-num">Count</th><th class="col-num">%</th><th>Last seen</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+const STATS        = {{ stats_json | safe }};
+const TIMELINE     = {{ timeline_json | safe }};
+const EFFECTIVENESS= {{ effectiveness_json | safe }};
+
+const C = {
+  green: '#22c55e', blue: '#3b82f6', amber: '#eab308',
+  violet: '#7c5cff', border: '#26262e', surface: '#15151c', secondary: '#8b8b94',
+};
+
+// Stats
+document.getElementById('r-blocked').textContent   = (STATS.blocked   ?? 0).toLocaleString();
+document.getElementById('r-allowed').textContent   = (STATS.allowed   ?? 0).toLocaleString();
+document.getElementById('r-unmatched').textContent = (STATS.unmatched ?? 0).toLocaleString();
+document.getElementById('r-rate').textContent      = (STATS.block_rate ?? 0) + '%';
+
+// Tables
+function renderTable(id, rows) {
+  const tbody = document.querySelector(`#${id} tbody`);
+  tbody.innerHTML = (rows || []).map(r =>
+    `<tr><td>${r.host}</td><td class="col-num">${r.count.toLocaleString()}</td><td class="col-num secondary">${r.pct}%</td><td class="col-time secondary">${r.last_seen}</td></tr>`
+  ).join('') || '<tr><td colspan="4" style="color:var(--secondary)">No data</td></tr>';
+}
+renderTable('r-table-blocked',   STATS.top_blocked);
+renderTable('r-table-allowed',   STATS.top_allowed);
+renderTable('r-table-unmatched', STATS.top_unmatched);
+
+Chart.defaults.color = C.secondary;
+Chart.defaults.borderColor = C.border;
+
+// Timeline chart
+new Chart(document.getElementById('r-timeline'), {
+  type: 'line',
+  data: {
+    labels: TIMELINE.labels,
+    datasets: [
+      { label:'Blocked',   data: TIMELINE.blocked,   borderColor: C.green,  backgroundColor: C.green  + '4d', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0 },
+      { label:'Allowed',   data: TIMELINE.allowed,   borderColor: C.blue,   backgroundColor: C.blue   + '4d', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0 },
+      { label:'Unmatched', data: TIMELINE.unmatched, borderColor: C.amber,  backgroundColor: C.amber  + '4d', fill: true, tension: 0.4, borderWidth: 2, pointRadius: 0 },
+    ],
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position: 'top', labels: { usePointStyle: true, padding: 16 } },
+      tooltip: { backgroundColor: C.surface, borderColor: C.border, borderWidth: 1 },
+    },
+    scales: {
+      x: { grid: { color: C.border }, ticks: { maxTicksLimit: 8 } },
+      y: { grid: { color: C.border }, beginAtZero: true },
+    },
+  },
+});
+
+// Effectiveness chart
+new Chart(document.getElementById('r-effectiveness'), {
+  type: 'bar',
+  data: {
+    labels: EFFECTIVENESS.map(b => b.label),
+    datasets: [{
+      data: EFFECTIVENESS.map(b => b.rate),
+      backgroundColor: EFFECTIVENESS.map(b =>
+        b.rate >= 80 ? C.green + '99' : b.rate >= 60 ? C.amber + '99' : b.total > 0 ? '#ef444499' : C.border
+      ),
+      borderRadius: 2, borderWidth: 0,
+    }],
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => ` ${ctx.raw.toFixed(1)}% block rate` } },
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { maxTicksLimit: 6 } },
+      y: { min: 0, max: 100, grid: { color: C.border }, ticks: { callback: v => v + '%' } },
+    },
+  },
+});
+</script>
+</body>
+</html>

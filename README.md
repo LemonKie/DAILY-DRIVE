@@ -82,6 +82,14 @@ This kills any leftover `mitmdump.exe` process and disables the proxy.
 
 ---
 
+## Dashboard
+
+A web dashboard is available at `dashboard/`. Run `start-dashboard.bat` after starting
+the blocker to view live stats, manage rules from a browser UI, and export session
+reports. See [`dashboard/README.md`](dashboard/README.md) for details.
+
+---
+
 ## Iterating on Rules
 
 The workflow after a session:

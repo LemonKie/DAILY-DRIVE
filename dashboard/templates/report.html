@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Export Report{% endblock %}
+
+{% block content %}
+
+<header class="dash-header">
+  <div class="dash-header-left">
+    <span class="label-caps">Export Report</span>
+  </div>
+</header>
+
+<div class="report-page">
+
+  <div class="report-hero">
+    <h1 class="report-title">Session Report</h1>
+    <p class="report-subtitle secondary">
+      Generates a self-contained HTML file with today's traffic analysis —
+      suitable for portfolio documentation, sharing with colleagues, or archiving.
+    </p>
+  </div>
+
+  <div class="report-grid">
+
+    <section class="card">
+      <div class="card-header"><span class="label-caps">What's included</span></div>
+      <ul class="report-checklist">
+        <li><span class="check-icon label-blocked">✓</span> Blocked / Allowed / Unmatched totals and block rate</li>
+        <li><span class="check-icon label-allowed">✓</span> Top 20 domains per verdict category</li>
+        <li><span class="check-icon label-blocked">✓</span> Full-day traffic timeline chart</li>
+        <li><span class="check-icon label-blocked">✓</span> Block effectiveness gauge (per-minute)</li>
+        <li><span class="check-icon secondary">✓</span> Generation timestamp and methodology note</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <div class="card-header"><span class="label-caps">Privacy filter</span></div>
+      <p class="report-note secondary">
+        The following domains are automatically stripped before export — they will not
+        appear in the downloaded file:
+      </p>
+      <ul class="privacy-list secondary mono small">
+        <li>*.spotify.com</li>
+        <li>*.discord.com / *.discordapp.com</li>
+        <li>claude.ai / *.anthropic.com</li>
+        <li>accounts.google.com / oauth2.googleapis.com</li>
+      </ul>
+    </section>
+
+  </div>
+
+  <div class="report-actions">
+    <button id="export-btn" class="btn btn-primary" onclick="doExport()">
+      Download report-{{ today }}.html
+    </button>
+    <span id="export-status" class="export-status"></span>
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+'use strict';
+
+async function doExport() {
+  const btn    = document.getElementById('export-btn');
+  const status = document.getElementById('export-status');
+
+  btn.disabled    = true;
+  btn.textContent = 'Generating…';
+  status.className = 'export-status';
+  status.textContent = '';
+
+  try {
+    const resp = await fetch('/api/export', { method: 'POST' });
+    if (!resp.ok) throw new Error(resp.statusText);
+
+    const blob = await resp.blob();
+    const cd   = resp.headers.get('Content-Disposition') || '';
+    const name = cd.match(/filename="(.+?)"/)?.[1] || 'report.html';
+
+    const url = URL.createObjectURL(blob);
+    const a   = Object.assign(document.createElement('a'), { href: url, download: name });
+    a.click();
+    URL.revokeObjectURL(url);
+
+    status.textContent = '✓ Downloaded successfully';
+    status.className = 'export-status success';
+  } catch (err) {
+    status.textContent = '✗ Export failed: ' + err.message;
+    status.className = 'export-status error';
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Download report-{{ today }}.html';
+  }
+}
+</script>
+{% endblock %}

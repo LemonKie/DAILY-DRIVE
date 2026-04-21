@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Live{% endblock %}
+
+{% block content %}
+
+<header class="dash-header">
+  <div class="dash-header-left">
+    <span class="label-caps">Live Dashboard</span>
+  </div>
+  <div class="dash-header-right">
+    <span class="dash-meta">Session: <span class="mono" id="session-start">—</span></span>
+    <span class="dash-sep">·</span>
+    <span class="dash-meta">Updated: <span class="mono" id="last-update">—</span></span>
+  </div>
+</header>
+
+<!-- Empty / connecting state -->
+<div id="empty-state" class="empty-state">
+  <div class="empty-icon">📡</div>
+  <div class="empty-title">Connecting…</div>
+  <div class="empty-desc">No log data yet. Start the blocker and launch iTero to see activity here.</div>
+</div>
+
+<!-- Main dashboard (hidden until first data arrives) -->
+<div id="dash-content" hidden>
+
+  <!-- ── Stat cards ── -->
+  <div class="stats-grid">
+
+    <div class="stat-card stat-blocked">
+      <div class="stat-top">
+        <span class="stat-label">Blocked</span>
+        <span class="stat-badge badge-blocked">today</span>
+      </div>
+      <div class="stat-value mono" id="stat-blocked">0</div>
+      <div class="stat-sub secondary" id="stat-blocked-sub"></div>
+      <canvas id="spark-blocked" class="sparkline" width="120" height="36"></canvas>
+    </div>
+
+    <div class="stat-card stat-allowed">
+      <div class="stat-top">
+        <span class="stat-label">Allowed</span>
+        <span class="stat-badge badge-allowed">today</span>
+      </div>
+      <div class="stat-value mono" id="stat-allowed">0</div>
+      <div class="stat-sub secondary" id="stat-allowed-sub"></div>
+      <canvas id="spark-allowed" class="sparkline" width="120" height="36"></canvas>
+    </div>
+
+    <div class="stat-card stat-unmatched">
+      <div class="stat-top">
+        <span class="stat-label">Unmatched</span>
+        <span class="stat-badge badge-unmatched">review</span>
+      </div>
+      <div class="stat-value mono" id="stat-unmatched">0</div>
+      <div class="stat-sub secondary" id="stat-unmatched-sub"></div>
+      <canvas id="spark-unmatched" class="sparkline" width="120" height="36"></canvas>
+    </div>
+
+    <div class="stat-card stat-rate">
+      <div class="stat-top">
+        <span class="stat-label">Block Rate</span>
+        <span class="stat-badge badge-rate">%</span>
+      </div>
+      <div class="stat-value mono" id="stat-rate">0%</div>
+      <div class="stat-sub secondary" id="stat-rate-sub"></div>
+      <canvas id="spark-rate" class="sparkline" width="120" height="36"></canvas>
+    </div>
+
+  </div>
+
+  <!-- ── Effectiveness gauge ── -->
+  <section class="card">
+    <div class="card-header">
+      <span class="label-caps">Block effectiveness — last hour</span>
+      <span class="secondary small" id="effectiveness-info"></span>
+    </div>
+    <div class="chart-wrap-sm">
+      <canvas id="chart-effectiveness"></canvas>
+    </div>
+  </section>
+
+  <!-- ── Traffic timeline ── -->
+  <section class="card">
+    <div class="card-header">
+      <span class="label-caps">Traffic timeline</span>
+      <div class="window-selector" role="group" aria-label="Time window">
+        <button class="win-btn active" data-window="30m">30m</button>
+        <button class="win-btn" data-window="1h">1h</button>
+        <button class="win-btn" data-window="6h">6h</button>
+        <button class="win-btn" data-window="today">Today</button>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="chart-timeline"></canvas>
+    </div>
+  </section>
+
+  <!-- ── Top-20 tables ── -->
+  <div class="tables-grid">
+
+    <section class="card">
+      <div class="card-header">
+        <span class="label-caps label-blocked">Top Blocked</span>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table" id="table-blocked">
+          <thead>
+            <tr>
+              <th>Domain</th>
+              <th class="col-num">Count</th>
+              <th class="col-num">%</th>
+              <th class="col-time">Last seen</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <span class="label-caps label-allowed">Top Allowed</span>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table" id="table-allowed">
+          <thead>
+            <tr>
+              <th>Domain</th>
+              <th class="col-num">Count</th>
+              <th class="col-num">%</th>
+              <th class="col-time">Last seen</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <span class="label-caps label-unmatched">Top Unmatched</span>
+        <span class="secondary small">click to add rules</span>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table" id="table-unmatched">
+          <thead>
+            <tr>
+              <th>Domain</th>
+              <th class="col-num">Count</th>
+              <th class="col-num">%</th>
+              <th class="col-time">Last seen</th>
+              <th class="col-actions">Rules</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+  </div><!-- /tables-grid -->
+
+</div><!-- /dash-content -->
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script src="{{ url_for('static', filename='js/live.js') }}"></script>
+{% endblock %}

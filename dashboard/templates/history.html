@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}History{% endblock %}
+
+{% block content %}
+
+<div class="history-layout">
+
+  <!-- ── Sidebar ── -->
+  <aside class="history-sidebar">
+    <div class="sidebar-header label-caps">Session logs</div>
+    <ul id="date-list" class="date-list">
+      <li class="date-item secondary">Loading…</li>
+    </ul>
+  </aside>
+
+  <!-- ── Main pane ── -->
+  <div class="history-main">
+
+    <div id="history-banner" class="history-banner" hidden></div>
+
+    <!-- Placeholder before a date is selected -->
+    <div id="history-empty" class="empty-state">
+      <div class="empty-icon">🗓</div>
+      <div class="empty-title">Select a session</div>
+      <div class="empty-desc">Choose a date from the left panel to view that session's traffic analysis.</div>
+    </div>
+
+    <!-- Content shown after a date is selected -->
+    <div id="history-content" hidden>
+
+      <div class="stats-grid">
+        <div class="stat-card stat-blocked">
+          <div class="stat-top"><span class="stat-label">Blocked</span></div>
+          <div class="stat-value mono" id="h-stat-blocked">—</div>
+        </div>
+        <div class="stat-card stat-allowed">
+          <div class="stat-top"><span class="stat-label">Allowed</span></div>
+          <div class="stat-value mono" id="h-stat-allowed">—</div>
+        </div>
+        <div class="stat-card stat-unmatched">
+          <div class="stat-top"><span class="stat-label">Unmatched</span></div>
+          <div class="stat-value mono" id="h-stat-unmatched">—</div>
+        </div>
+        <div class="stat-card stat-rate">
+          <div class="stat-top"><span class="stat-label">Block Rate</span></div>
+          <div class="stat-value mono" id="h-stat-rate">—</div>
+        </div>
+      </div>
+
+      <section class="card">
+        <div class="card-header">
+          <span class="label-caps">Traffic timeline</span>
+          <div class="window-selector" role="group">
+            <button class="win-btn active" data-hwindow="30m">30m</button>
+            <button class="win-btn" data-hwindow="1h">1h</button>
+            <button class="win-btn" data-hwindow="6h">6h</button>
+            <button class="win-btn" data-hwindow="today">Full day</button>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="h-chart-timeline"></canvas>
+        </div>
+      </section>
+
+      <div class="tables-grid">
+
+        <section class="card">
+          <div class="card-header"><span class="label-caps label-blocked">Top Blocked</span></div>
+          <div class="table-scroll">
+            <table class="data-table" id="h-table-blocked">
+              <thead><tr><th>Domain</th><th class="col-num">Count</th><th class="col-num">%</th><th class="col-time">Last seen</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-header"><span class="label-caps label-allowed">Top Allowed</span></div>
+          <div class="table-scroll">
+            <table class="data-table" id="h-table-allowed">
+              <thead><tr><th>Domain</th><th class="col-num">Count</th><th class="col-num">%</th><th class="col-time">Last seen</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-header"><span class="label-caps label-unmatched">Top Unmatched</span></div>
+          <div class="table-scroll">
+            <table class="data-table" id="h-table-unmatched">
+              <thead><tr><th>Domain</th><th class="col-num">Count</th><th class="col-num">%</th><th class="col-time">Last seen</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+      </div>
+    </div><!-- /history-content -->
+  </div><!-- /history-main -->
+</div><!-- /history-layout -->
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script>
+'use strict';
+
+let _currentHistDate = '';
+let _histTimelineChart = null;
+
+// ── Load date list ────────────────────────────────────────────────────────────
+(async () => {
+  try {
+    const dates = await fetch('/api/dates').then(r => r.json());
+    const ul = document.getElementById('date-list');
+    if (!dates.length) {
+      ul.innerHTML = '<li class="date-item secondary">No logs found</li>';
+      return;
+    }
+    ul.innerHTML = dates.map(d =>
+      `<li class="date-item" data-date="${d}" onclick="loadHistDate('${d}')">${d}</li>`
+    ).join('');
+  } catch {
+    document.getElementById('date-list').innerHTML =
+      '<li class="date-item secondary">Failed to load</li>';
+  }
+})();
+
+// ── Init history timeline chart ───────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  _histTimelineChart = initTimelineChart('h-chart-timeline');
+
+  document.querySelectorAll('[data-hwindow]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-hwindow]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (_currentHistDate) loadHistTimeline(_currentHistDate, btn.dataset.hwindow);
+    });
+  });
+});
+
+// ── Load selected date ────────────────────────────────────────────────────────
+async function loadHistDate(dateStr) {
+  _currentHistDate = dateStr;
+
+  document.querySelectorAll('.date-item').forEach(li => li.classList.remove('active'));
+  document.querySelector(`[data-date="${dateStr}"]`)?.classList.add('active');
+
+  const banner = document.getElementById('history-banner');
+  banner.textContent = `Viewing historical data — ${dateStr}`;
+  banner.removeAttribute('hidden');
+
+  document.getElementById('history-empty').setAttribute('hidden', '');
+  document.getElementById('history-content').removeAttribute('hidden');
+
+  const [stats] = await Promise.all([
+    fetch(`/api/stats?date=${dateStr}`).then(r => r.json()),
+    loadHistTimeline(dateStr, '30m'),
+  ]);
+
+  setEl('h-stat-blocked',   fmt(stats.blocked   ?? 0));
+  setEl('h-stat-allowed',   fmt(stats.allowed   ?? 0));
+  setEl('h-stat-unmatched', fmt(stats.unmatched ?? 0));
+  setEl('h-stat-rate',      (stats.block_rate   ?? 0) + '%');
+
+  renderHistTable('h-table-blocked',   stats.top_blocked);
+  renderHistTable('h-table-allowed',   stats.top_allowed);
+  renderHistTable('h-table-unmatched', stats.top_unmatched);
+}
+
+async function loadHistTimeline(dateStr, win) {
+  try {
+    const data = await fetch(`/api/timeline?date=${dateStr}&window=${win}`).then(r => r.json());
+    if (_histTimelineChart) {
+      _histTimelineChart.data.labels           = data.labels;
+      _histTimelineChart.data.datasets[0].data = data.blocked;
+      _histTimelineChart.data.datasets[1].data = data.allowed;
+      _histTimelineChart.data.datasets[2].data = data.unmatched;
+      _histTimelineChart.update('none');
+    }
+  } catch { /* silent */ }
+}
+
+function renderHistTable(id, rows) {
+  const tbody = document.querySelector(`#${id} tbody`);
+  if (!tbody) return;
+  tbody.innerHTML = (rows || []).map(r => `
+    <tr>
+      <td class="mono">${escHtml(r.host)}</td>
+      <td class="col-num mono">${fmt(r.count)}</td>
+      <td class="col-num secondary">${r.pct}%</td>
+      <td class="col-time secondary">${escHtml(r.last_seen)}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="4" class="empty-cell">No data</td></tr>';
+}
+
+function setEl(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+function fmt(n) { return Number(n).toLocaleString(); }
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+{% endblock %}
